@@ -2,7 +2,6 @@ use std::cmp::min;
 use std::fs::File;
 use std::io::BufReader;
 use std::io::Lines;
-use std::io::Read;
 
 use ncurses;
 
@@ -48,19 +47,29 @@ impl Pager {
     }
 
     pub fn next_line(&mut self) {
-        if ! self.line_bounds_valid(self.cur_line as i64 + 1) {
-            return
-        }
-        let target_line = self.cur_line + 1;
-        self.show_line(target_line);
+        self.offset_page(1);
     }
 
     pub fn prev_line(&mut self) {
-        if ! self.line_bounds_valid(self.cur_line as i64 - 1) {
+        self.offset_page(-1);
+    }
+
+    pub fn next_page(&mut self){
+        let offset = self.height as i64;
+        self.offset_page(offset);
+    }
+
+    pub fn prev_page(&mut self) {
+        let offset = -1 * self.height as i64;
+        self.offset_page(offset);
+    }
+
+    fn offset_page(&mut self, line_offset: i64) {
+        if ! self.line_bounds_valid(self.cur_line as i64 + line_offset) {
             return
         }
-        let target_line = self.cur_line - 1;
-        self.show_line(target_line);
+        let target_line = self.cur_line as i64 + line_offset;
+        self.show_line(target_line as usize);
     }
 
     fn flatten_lines(lines: &[String]) -> String {
