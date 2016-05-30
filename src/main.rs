@@ -1,5 +1,7 @@
 extern crate ncurses;
 
+mod pager;
+
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -8,8 +10,10 @@ use std::io::Write;
 
 use ncurses::*;
 
+use pager::Pager;
 
-static fname: &'static str = "Cargo.toml";
+
+static FNAME: &'static str = "pg730.txt";
 
 
 fn main() {
@@ -34,25 +38,29 @@ fn main() {
     box_(border_win, 0 as u64, 0 as u64);
     wrefresh(border_win);
 
+
     let win = newwin(height, width, margin / 2, margin / 2);
-    wprintw(win, &flatten_lines(&read_file()));
-    wrefresh(win);
+    let mut pager = Pager::new(win);
+    let mut file = File::open(FNAME).unwrap();
+    let reader = BufReader::new(file);
+    let lines = reader.lines();
+    pager.load(lines);
+    pager.show_line(0);
 
-    getch();
-    wclear(win);
-    wrefresh(win);
+    loop {
+        match getch() {
+            KEY_UP => pager.prev_line(),
+            KEY_DOWN => pager.next_line(),
+            _ => break
+        }
+    }
 
-    getch();
     endwin();
-
     delscreen(screen);
-
-    writeln!(&mut std::io::stderr(), "max_x: {}, max_y: {}", max_x, max_y);
-    writeln!(&mut std::io::stderr(), "width: {}, height: {}", height, width);
 }
 
 fn read_file() -> Vec<String> {
-    let mut file = File::open(fname).unwrap();
+    let mut file = File::open(FNAME).unwrap();
     let reader = BufReader::new(file);
     let result: Vec<String> = reader.lines().map(|s| s.unwrap()).collect();
 
