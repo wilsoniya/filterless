@@ -1,8 +1,4 @@
 use std::cmp::min;
-use std::fs::File;
-use std::io::BufReader;
-use std::io::BufRead;
-use std::io::Lines;
 
 use ncurses;
 
@@ -31,8 +27,11 @@ impl Pager {
         }
     }
 
-    pub fn load<T: BufRead>(&mut self, lines: Lines<T>) {
-        self.lines = lines.map(|s| s.unwrap()).collect();
+    pub fn load(&mut self, text: String) {
+        self.lines = text
+            .lines()
+            .map(|s| String::from(s))
+            .collect();
     }
 
     pub fn show_line(&mut self, line_num: usize) {
@@ -95,14 +94,19 @@ impl Pager {
     }
 
     fn get_filtered_text(&self, start: usize) -> String {
-        let matching_lines: Vec<String> = self.lines
-            .iter()
-            .filter(|&l| {
-                l.contains(&self.filter_string.clone().unwrap())
-            })
-            .map(ToOwned::to_owned)
-            .take(self.height)
-            .collect();
-        Self::flatten_lines(&matching_lines)
+        match self.filter_string {
+            Some(ref filter_string) => {
+                let matching_lines: Vec<String> = (&self.lines[start..])
+                    .iter()
+                    .filter(|&l| l.contains(filter_string))
+                    .map(ToOwned::to_owned)
+                    .take(self.height)
+                    .collect();
+                Self::flatten_lines(&matching_lines)
+            },
+            None => {
+                String::new()
+            }
+        }
     }
 }
