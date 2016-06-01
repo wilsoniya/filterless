@@ -16,6 +16,7 @@ static FNAME: &'static str = "pg730.txt";
 const LOWER_J: i32 = 0x6a;
 const LOWER_K: i32 = 0x6b;
 const LOWER_Q: i32 = 0x71;
+const FWD_SLASH: i32 = 0x2f;
 
 
 fn main() {
@@ -47,12 +48,26 @@ fn main() {
             LOWER_K => pager.prev_line(),
             KEY_NPAGE => pager.next_page(),
             KEY_PPAGE => pager.prev_page(),
+            FWD_SLASH => {
+                let filter_str = _filter(width, height);
+                pager.filter(filter_str);
+            },
             LOWER_Q => break,
             _ => continue
-
         }
     }
 
     endwin();
     delscreen(screen);
+}
+
+fn _filter(width: i32, height: i32) -> String {
+    let filter_win = newwin(1, width, height - 1, 0);
+    echo();
+    wprintw(filter_win, "Filter: ");
+    wrefresh(filter_win);
+    let mut filter_str = String::new();
+    wgetstr(filter_win, &mut filter_str);
+    noecho();
+    return filter_str;
 }
