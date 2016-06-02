@@ -67,5 +67,6 @@ fn _filter(width: i32, height: i32) -> String {
     let mut filter_str = String::new();
     wgetstr(filter_win, &mut filter_str);
     noecho();
+    delwin(filter_win);
     return filter_str;
 }

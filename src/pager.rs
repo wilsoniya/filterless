@@ -46,6 +46,7 @@ impl Pager {
         ncurses::wclear(self.window);
         ncurses::wprintw(self.window, &text);
         ncurses::wrefresh(self.window);
+        ncurses::refresh();
 
         self.cur_line = line_num;
     }
