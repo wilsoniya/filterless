@@ -4,6 +4,7 @@ mod pager;
 
 use std::fs::File;
 use std::io::Read;
+use std::char;
 
 use ncurses::*;
 
@@ -15,12 +16,16 @@ const LOWER_J: i32 = 0x6a;
 const LOWER_K: i32 = 0x6b;
 const LOWER_Q: i32 = 0x71;
 const FWD_SLASH: i32 = 0x2f;
+const CTRL_D: i32 = 4;
+const CTRL_U: i32 = 21;
+const ENTER: i32 = 10;
+const BACKSPACE: i32 = 127;
 
 
 fn main() {
     let screen: SCREEN = initscr();
     noecho();
-    keypad(stdscr, true);
+//  keypad(stdscr, true);
 
     let mut max_x = 0;
     let mut max_y = 0;
@@ -44,14 +49,14 @@ fn main() {
         match getch() {
             LOWER_J => pager.next_line(),
             LOWER_K => pager.prev_line(),
-            KEY_NPAGE => pager.next_page(),
-            KEY_PPAGE => pager.prev_page(),
+            KEY_NPAGE | CTRL_D => pager.next_page(),
+            KEY_PPAGE | CTRL_U => pager.prev_page(),
             FWD_SLASH => {
                 let filter_str = _filter(width, height);
                 pager.filter(filter_str);
             },
             LOWER_Q => break,
-            _ => continue
+            _ => continue,
         }
     }
 
@@ -61,12 +66,34 @@ fn main() {
 
 fn _filter(width: i32, height: i32) -> String {
     let filter_win = newwin(1, width, height - 1, 0);
-    echo();
     wprintw(filter_win, "Filter: ");
     wrefresh(filter_win);
     let mut filter_str = String::new();
-    wgetstr(filter_win, &mut filter_str);
-    noecho();
+    loop {
+        match getch() {
+            ENTER => break,
+            BACKSPACE => {
+                match filter_str.pop() {
+                    Some(_) => {
+                        let mut x = 0;
+                        let mut y = 0;
+                        getyx(filter_win, &mut y, &mut x);
+                        wmove(filter_win, y, x - 1);
+                        wdelch(filter_win);
+                        wrefresh(filter_win);
+                    },
+                    None => {},
+                }
+            },
+            ch => {
+                filter_str.push(char::from_u32(ch as u32).unwrap());
+                waddch(filter_win, ch as chtype);
+                wrefresh(filter_win);
+            },
+        }
+    }
+//  wgetstr(filter_win, &mut filter_str);
+//  noecho();
     delwin(filter_win);
     return filter_str;
 }
