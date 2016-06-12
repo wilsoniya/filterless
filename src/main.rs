@@ -1,10 +1,16 @@
+#![feature(btree_range)]
+#![feature(collections_bound)]
+#![feature(type_ascription)]
+
 extern crate ncurses;
 
+mod buffered_filter;
 mod pager;
 
-use std::fs::File;
-use std::io::Read;
 use std::char;
+use std::fs::File;
+use std::io::BufRead;
+use std::io::BufReader;
 
 use ncurses::*;
 
@@ -36,14 +42,13 @@ fn main() {
 
     refresh();
 
-    let mut file = File::open(FNAME).unwrap();
-    let mut text = String::new();
-    file.read_to_string(&mut text);
+    let file = File::open(FNAME).unwrap();
+    let reader = BufReader::new(file);
     let win = newwin(height, width, margin / 2, margin / 2);
 
     let mut pager = Pager::new(win);
-    pager.load(text);
-    pager.show_line(0);
+    pager.load(reader.lines());
+    pager.offset_page(0);
 
     loop {
         match getch() {

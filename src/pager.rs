@@ -1,54 +1,35 @@
-use std::cmp::min;
+use std::io::BufRead;
+use std::io::Lines;
 
 use ncurses;
 
-pub struct Pager {
+use buffered_filter::BufferedFilter;
+
+pub struct Pager<B> {
     window: ncurses::WINDOW,
-    lines: Vec<String>,
     cur_line: usize,
     height: usize,
     width: usize,
-    filter_string: Option<String>,
+    filter: Option<BufferedFilter<B>>
 }
 
-impl Pager {
-    pub fn new(window: ncurses::WINDOW) -> Pager {
+impl<B:BufRead> Pager<B> {
+    pub fn new(window: ncurses::WINDOW) -> Pager<B> {
         let mut height = 0;
         let mut width = 0;
         ncurses::getmaxyx(window, &mut height, &mut width);
 
         Pager {
             window: window,
-            lines: Vec::new(),
             cur_line: 0,
             width: width as usize,
             height: height as usize,
-            filter_string: Option::None,
+            filter: None,
         }
     }
 
-    pub fn load(&mut self, text: String) {
-        self.lines = text
-            .lines()
-            .map(|s| String::from(s))
-            .collect();
-    }
-
-    pub fn show_line(&mut self, line_num: usize) {
-        assert!(self.line_bounds_valid(line_num as i64));
-        let start = line_num;
-        let end = min(start + self.height, self.lines.len());
-
-        let text = match self.filter_string {
-            Some(_) => self.get_filtered_text(start),
-            None => Self::flatten_lines(&self.lines[start..end]),
-        };
-        ncurses::wclear(self.window);
-        ncurses::wprintw(self.window, &text);
-        ncurses::wrefresh(self.window);
-        ncurses::refresh();
-
-        self.cur_line = line_num;
+    pub fn load(&mut self, lines: Lines<B>) {
+        self.filter = Some(BufferedFilter::new(lines));
     }
 
     pub fn next_line(&mut self) {
@@ -70,44 +51,40 @@ impl Pager {
     }
 
     pub fn filter(&mut self, target: String) {
-        let cur_line = self.cur_line;
-        self.filter_string = match target.len() {
-            0 => Option::None,
-            _ => Option::Some(target),
-        };
-        self.show_line(cur_line);
+        if self.filter.is_none() {
+            return;
+        }
+
+        {
+            let filter = self.filter.as_mut().unwrap();
+            filter.set_filter(target);
+        }
+
+        self.cur_line = 0;
+        self.offset_page(0);
     }
 
-    fn offset_page(&mut self, line_offset: i64) {
-        if ! self.line_bounds_valid(self.cur_line as i64 + line_offset) {
+    pub fn offset_page(&mut self, line_offset: i64) {
+        if self.cur_line as i64 + line_offset < 0 {
             return
         }
-        let target_line = self.cur_line as i64 + line_offset;
-        self.show_line(target_line as usize);
+
+        match self.filter {
+            Some(ref mut filter) => {
+                let lines = filter.offset_to_lines(line_offset, self.height);
+                let text = Self::flatten_lines(&lines);
+                ncurses::wclear(self.window);
+                ncurses::wprintw(self.window, &text);
+                ncurses::wrefresh(self.window);
+                ncurses::refresh();
+
+                self.cur_line = (self.cur_line as i64 + line_offset) as usize;
+            },
+            None => (),
+        }
     }
 
     fn flatten_lines(lines: &[String]) -> String {
         lines.join("\n")
-    }
-
-    fn line_bounds_valid(&self, line_num: i64) -> bool {
-        (line_num >= 0) && (line_num < self.lines.len() as i64)
-    }
-
-    fn get_filtered_text(&self, start: usize) -> String {
-        match self.filter_string {
-            Some(ref filter_string) => {
-                let matching_lines: Vec<String> = (&self.lines[start..])
-                    .iter()
-                    .filter(|&l| l.contains(filter_string))
-                    .map(ToOwned::to_owned)
-                    .take(self.height)
-                    .collect();
-                Self::flatten_lines(&matching_lines)
-            },
-            None => {
-                String::new()
-            }
-        }
     }
 }
