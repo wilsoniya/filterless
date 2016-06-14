@@ -5,3 +5,4 @@ authors = ["wilsoniya"]
 
 [dependencies]
 ncurses = "5.*"
+clap = "2.5.2"

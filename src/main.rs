@@ -2,6 +2,7 @@
 #![feature(collections_bound)]
 #![feature(type_ascription)]
 
+extern crate clap;
 extern crate ncurses;
 
 mod buffered_filter;
@@ -13,11 +14,11 @@ use std::io::BufRead;
 use std::io::BufReader;
 
 use ncurses::*;
+use clap::{Arg, App, SubCommand};
 
 use pager::Pager;
 
 
-static FNAME: &'static str = "pg730.txt";
 const LOWER_J: i32 = 0x6a;
 const LOWER_K: i32 = 0x6b;
 const LOWER_Q: i32 = 0x71;
@@ -29,6 +30,21 @@ const BACKSPACE: i32 = 127;
 
 
 fn main() {
+
+	let matches = App::new("Filterless")
+		.version("1.0")
+		.author("Michael Wilson")
+		.about("Less, but with filtering")
+		.arg(Arg::with_name("INPUT")
+			 .help("Sets the input file to use")
+			 .required(true)
+			 .index(1))
+        .get_matches();
+
+    let fname = matches.value_of("INPUT").unwrap();
+    let file = File::open(fname).unwrap();
+    let reader = BufReader::new(file);
+
     let screen: SCREEN = initscr();
     noecho();
 //  keypad(stdscr, true);
@@ -42,8 +58,6 @@ fn main() {
 
     refresh();
 
-    let file = File::open(FNAME).unwrap();
-    let reader = BufReader::new(file);
     let win = newwin(height, width, margin / 2, margin / 2);
 
     let mut pager = Pager::new(win);

@@ -6,7 +6,7 @@ use std::cmp::max;
 
 pub struct BufferedFilter<B> {
     /// raw buffered lines
-    raw_lines: Vec<String>,
+    raw_lines: Vec<(usize, String)>,
     /// string to filter on
     filter_string: Option<String>,
     /// indices into `raw_lines` where `filter_string` is present
@@ -64,7 +64,10 @@ impl<B: BufRead> BufferedFilter<B> {
                         },
                         None => {
                             match self.filter_line_indices.iter().last() {
-                                Some(_idx) => *_idx,
+                                Some(_idx) => {
+                                    self.cur_line = self.filter_line_indices.len();
+                                    *_idx
+                                },
                                 None => 0,
                             }
                         },
@@ -89,12 +92,17 @@ impl<B: BufRead> BufferedFilter<B> {
             return;
         }
 
-        let num_lines = num_lines - self.raw_lines.len();
-        let iter_lines: Vec<String> = (&mut self.line_iter)
-            .take(num_lines)
-            .map(|line| line.unwrap())
+        let mut total_lines = self.raw_lines.len();
+        let remaining_lines = num_lines - total_lines;
+        let mut iter_lines: Vec<(usize, String)> = (&mut self.line_iter)
+            .take(remaining_lines)
+            .map(|line| {
+                let ret = (total_lines, line.unwrap());
+                total_lines += 1;
+                ret
+            })
             .collect();
-        self.raw_lines.append(&mut iter_lines.clone());
+        self.raw_lines.append(&mut iter_lines);
     }
 
     fn get_unfiltered_lines(&mut self, start_line_num: usize, num_lines: usize)
@@ -104,6 +112,7 @@ impl<B: BufRead> BufferedFilter<B> {
         (&self.raw_lines[start_line_num..])
             .iter()
             .map(ToOwned::to_owned)
+            .map(|line| line.1)
             .take(num_lines)
             .collect()
     }
@@ -145,7 +154,7 @@ impl<B: BufRead> BufferedFilter<B> {
 
         // search buffered lines for filter match
         for line in &self.raw_lines[cur_idx..] {
-            if line.contains(filter_string) {
+            if line.1.contains(filter_string) {
                 self.filter_line_indices.insert(cur_idx);
                 found_matches += 1;
             }
@@ -170,7 +179,8 @@ impl<B: BufRead> BufferedFilter<B> {
                     found_matches += 1;
                 }
 
-                self.raw_lines.push(line.to_owned());
+                let raw_lines_len = self.raw_lines.len();
+                self.raw_lines.push((raw_lines_len, line.to_owned()));
 
                 cur_idx += 1;
 
@@ -194,8 +204,7 @@ impl<B: BufRead> BufferedFilter<B> {
             .map(|idx| self.raw_lines.get(*idx))
             .take(num_lines)
             .take_while(|line| line.is_some())
-            .map(|line| line.unwrap())
-            .map(ToOwned::to_owned)
+            .map(|line| line.unwrap().1.clone())
             .collect()
     }
 }

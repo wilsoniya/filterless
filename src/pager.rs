@@ -65,10 +65,6 @@ impl<B:BufRead> Pager<B> {
     }
 
     pub fn offset_page(&mut self, line_offset: i64) {
-        if self.cur_line as i64 + line_offset < 0 {
-            return
-        }
-
         match self.filter {
             Some(ref mut filter) => {
                 let lines = filter.offset_to_lines(line_offset, self.height);
