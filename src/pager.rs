@@ -65,22 +65,53 @@ impl<B:BufRead> Pager<B> {
     }
 
     pub fn offset_page(&mut self, line_offset: i64) {
-        match self.filter {
-            Some(ref mut filter) => {
-                let lines = filter.offset_to_lines(line_offset, self.height);
-                let text = Self::flatten_lines(&lines);
-                ncurses::wclear(self.window);
-                ncurses::wprintw(self.window, &text);
-                ncurses::wrefresh(self.window);
-                ncurses::refresh();
-
-                self.cur_line = (self.cur_line as i64 + line_offset) as usize;
-            },
-            None => (),
+        if self.filter.is_none() {
+            return;
         }
+
+        let filter_string;
+        let lines;
+
+        {
+            let mut filter = self.filter.as_mut().unwrap();
+            lines = filter.offset_to_lines(line_offset, self.height);
+            filter_string = filter.get_filter();
+        }
+
+        self.print_lines(lines, filter_string);
+        self.cur_line = (self.cur_line as i64 + line_offset) as usize;
     }
 
-    fn flatten_lines(lines: &[String]) -> String {
-        lines.join("\n")
+    fn print_lines(&self, lines: Vec<String>, filter_string: Option<String>) {
+        ncurses::wclear(self.window);
+
+        ncurses::init_pair(1, ncurses::constants::COLOR_BLACK,
+                           ncurses::constants::COLOR_YELLOW);
+        ncurses::start_color();
+
+        for line in lines.iter() {
+            match filter_string {
+                Some(ref filter_string) => {
+                    let frags: Vec<&str> = line.split(filter_string).collect();
+
+                    for (i, frag) in frags.iter().enumerate() {
+                        ncurses::wprintw(self.window, frag);
+                        if i < frags.len() - 1 {
+                            ncurses::wattron(self.window, ncurses::COLOR_PAIR(1) as i32);
+                            ncurses::wprintw(self.window, filter_string);
+                            ncurses::wattroff(self.window, ncurses::COLOR_PAIR(1) as i32);
+                        }
+                    }
+                },
+                None => {
+                    ncurses::wprintw(self.window, line);
+                },
+            }
+
+            ncurses::wprintw(self.window, "\n");
+        }
+
+        ncurses::wrefresh(self.window);
+        ncurses::refresh();
     }
 }

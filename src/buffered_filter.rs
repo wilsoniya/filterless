@@ -45,6 +45,10 @@ impl<B: BufRead> BufferedFilter<B> {
         };
     }
 
+    pub fn get_filter(&self) -> Option<String> {
+        self.filter_string.clone()
+    }
+
     pub fn offset_to_lines(&mut self, offset: i64, num_lines: usize)
         -> Vec<String> {
         let start_line = max(self.cur_line as i64 + offset, 0) as usize;

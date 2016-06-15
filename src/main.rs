@@ -14,7 +14,7 @@ use std::io::BufRead;
 use std::io::BufReader;
 
 use ncurses::*;
-use clap::{Arg, App, SubCommand};
+use clap::{Arg, App};
 
 use pager::Pager;
 
@@ -47,7 +47,6 @@ fn main() {
 
     let screen: SCREEN = initscr();
     noecho();
-//  keypad(stdscr, true);
 
     let mut max_x = 0;
     let mut max_y = 0;
@@ -111,8 +110,6 @@ fn _filter(width: i32, height: i32) -> String {
             },
         }
     }
-//  wgetstr(filter_win, &mut filter_str);
-//  noecho();
     delwin(filter_win);
     return filter_str;
 }
