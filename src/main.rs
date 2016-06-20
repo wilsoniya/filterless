@@ -10,15 +10,15 @@ mod buffered_filter;
 mod pager;
 
 use std::char;
+use std::ffi::CString;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
-use std::io::{stdin, Stdin};
-use std::ffi::CString;
+use std::io::stdin;
 
-use ncurses::*;
 use clap::{Arg, App};
 use libc::{fopen};
+use ncurses::*;
 
 use pager::Pager;
 
@@ -32,6 +32,8 @@ const CTRL_U: i32 = 21;
 const ENTER: i32 = 10;
 const BACKSPACE: i32 = 127;
 
+const MARGIN: i32 = 0;
+
 
 fn main() {
     let _stdin = stdin();
@@ -43,13 +45,12 @@ fn main() {
     let mut max_x = 0;
     let mut max_y = 0;
     getmaxyx(stdscr, &mut max_y, &mut max_x);
-    let margin = 0i32;
-    let height = max_y - margin;
-    let width = max_x - margin;
+    let height = max_y - MARGIN;
+    let width = max_x - MARGIN;
 
     refresh();
 
-    let win = newwin(height, width, margin / 2, margin / 2);
+    let win = newwin(height, width, MARGIN / 2, MARGIN / 2);
     let mut pager = Pager::new(win);
     pager.load(lines);
     pager.offset_page(0);
@@ -78,37 +79,41 @@ fn get_cstring(string: &str) -> CString {
 }
 
 fn setup_term() -> SCREEN {
+    let tty;
+    let stdout;
+
     unsafe {
-        let tty = fopen(get_cstring("/dev/tty").as_ptr(),
+        tty = fopen(get_cstring("/dev/tty").as_ptr(),
                         get_cstring("r").as_ptr());
-        let stdout = fopen(get_cstring("/dev/stdout").as_ptr(),
+        stdout = fopen(get_cstring("/dev/stdout").as_ptr(),
                            get_cstring("w").as_ptr());
-
-        let term = newterm(None, stdout, tty);
-        set_term(term);
-        noecho();
-
-        term
     }
+
+    let term = newterm(None, stdout, tty);
+    set_term(term);
+    noecho();
+    term
 }
 
 fn get_input<'a>(_stdin: &'a std::io::Stdin) -> Box<BufRead + 'a> {
-//    let matches = App::new("Filterless")
-//        .version("1.0")
-//        .author("Michael Wilson")
-//        .about("Less, but with filtering")
-//        .arg(Arg::with_name("INPUT")
-//             .help("Sets the input file to use")
-//             .required(true)
-//             .index(1))
-//        .get_matches();
-//
-//    let fname = matches.value_of("INPUT").unwrap();
-//    let file = File::open(fname).unwrap();
-//    let reader: BufReader<File> = BufReader::new(file);
-//    Box::new(reader)
+      let matches = App::new("Filterless")
+          .version(env!("CARGO_PKG_VERSION"))
+          .author("Michael Wilson")
+          .about("Less, but with filtering")
+          .arg(Arg::with_name("INPUT")
+               .help("Sets the input file to use")
+               .required(false)
+               .index(1))
+          .get_matches();
 
-      Box::new(_stdin.lock())
+      match matches.value_of("INPUT") {
+          Some(fname) => {
+              let file = File::open(fname).unwrap();
+              let reader: BufReader<File> = BufReader::new(file);
+              Box::new(reader)
+          },
+          None => Box::new(_stdin.lock())
+      }
 }
 
 fn _filter(width: i32, height: i32) -> String {
