@@ -3,14 +3,13 @@ use std::io::Lines;
 
 use ncurses;
 
-use buffered_filter::BufferedFilter;
+use buffered_filter;
 
 pub struct Pager<B> {
     window: ncurses::WINDOW,
-    cur_line: usize,
     height: usize,
     width: usize,
-    filter: Option<BufferedFilter<B>>
+    filter: Option<buffered_filter::BufferedFilter<B>>
 }
 
 impl<B:BufRead> Pager<B> {
@@ -21,7 +20,6 @@ impl<B:BufRead> Pager<B> {
 
         Pager {
             window: window,
-            cur_line: 0,
             width: width as usize,
             height: height as usize,
             filter: None,
@@ -29,7 +27,7 @@ impl<B:BufRead> Pager<B> {
     }
 
     pub fn load(&mut self, lines: Lines<B>) {
-        self.filter = Some(BufferedFilter::new(lines));
+        self.filter = Some(buffered_filter::BufferedFilter::new(lines));
     }
 
     pub fn next_line(&mut self) {
@@ -60,7 +58,6 @@ impl<B:BufRead> Pager<B> {
             filter.set_filter(target);
         }
 
-        self.cur_line = 0;
         self.offset_page(0);
     }
 
@@ -79,17 +76,28 @@ impl<B:BufRead> Pager<B> {
         }
 
         self.print_lines(lines, filter_string);
-        self.cur_line = (self.cur_line as i64 + line_offset) as usize;
     }
 
-    fn print_lines(&self, lines: Vec<String>, filter_string: Option<String>) {
+    fn print_lines(&self, lines: Vec<buffered_filter::Line>,
+                   filter_string: Option<String>) {
         ncurses::wclear(self.window);
 
+        ncurses::start_color();
         ncurses::init_pair(1, ncurses::constants::COLOR_BLACK,
                            ncurses::constants::COLOR_YELLOW);
-        ncurses::start_color();
+        ncurses::init_pair(2, ncurses::constants::COLOR_GREEN,
+                           ncurses::constants::COLOR_BLACK);
 
-        for line in lines.iter() {
+        let buf_len = self.filter.as_ref().unwrap().get_buffer_length();
+        let num_digits = (buf_len as f32).log10().floor() as usize + 1;
+
+        for &(ref line_num, ref line) in lines.iter() {
+            // unconditionally print line number
+            ncurses::wattron(self.window, ncurses::COLOR_PAIR(2) as i32);
+            ncurses::wprintw(self.window,
+                             &format!("{:>1$} ", line_num + 1, num_digits));
+            ncurses::wattroff(self.window, ncurses::COLOR_PAIR(2) as i32);
+
             match filter_string {
                 Some(ref filter_string) => {
                     let frags: Vec<&str> = line.split(filter_string).collect();
@@ -112,6 +120,5 @@ impl<B:BufRead> Pager<B> {
         }
 
         ncurses::wrefresh(self.window);
-        ncurses::refresh();
     }
 }

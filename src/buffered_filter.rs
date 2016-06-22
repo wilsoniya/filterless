@@ -4,9 +4,12 @@ use std::io::Lines;
 use std::io::{stderr, Write};
 use std::cmp::max;
 
+/// A 2-tuple of line number and content string
+pub type Line = (usize, String);
+
 pub struct BufferedFilter<B> {
     /// raw buffered lines
-    raw_lines: Vec<(usize, String)>,
+    raw_lines: Vec<Line>,
     /// string to filter on
     filter_string: Option<String>,
     /// indices into `raw_lines` where `filter_string` is present
@@ -49,11 +52,15 @@ impl<B: BufRead> BufferedFilter<B> {
         self.filter_string.clone()
     }
 
+    pub fn get_buffer_length(&self) -> usize {
+        self.raw_lines.len()
+    }
+
     pub fn offset_to_lines(&mut self, offset: i64, num_lines: usize)
-        -> Vec<String> {
+        -> Vec<Line> {
         let start_line = max(self.cur_line as i64 + offset, 0) as usize;
 
-        let lines = match self.filter_string {
+        match self.filter_string {
             Some(_) => {
                 self.ensure_index_length(start_line, num_lines);
                 let first_idx: usize;
@@ -88,11 +95,7 @@ impl<B: BufRead> BufferedFilter<B> {
                 self.ensure_buffer_length(buf_len as usize);
                 self.get_unfiltered_lines(start_line, num_lines)
             }
-        };
-        let digits = (self.raw_lines.len() as f32).log10().floor() as usize + 1;
-        lines.iter()
-            .map(|&(ref i, ref l)| format!("{:>2$} {}", i + 1, l, digits))
-            .collect()
+        }
     }
 
     pub fn ensure_buffer_length(&mut self, num_lines: usize) {
@@ -103,7 +106,7 @@ impl<B: BufRead> BufferedFilter<B> {
 
         let mut total_lines = self.raw_lines.len();
         let remaining_lines = num_lines - total_lines;
-        let mut new_lines: Vec<(usize, String)> = (&mut self.line_iter)
+        let mut new_lines: Vec<Line> = (&mut self.line_iter)
             .take(remaining_lines)
             .map(|line| {
                 let ret = (total_lines, line.unwrap());
@@ -115,7 +118,7 @@ impl<B: BufRead> BufferedFilter<B> {
     }
 
     fn get_unfiltered_lines(&mut self, start_line_num: usize, num_lines: usize)
-        -> Vec<(usize, String)> {
+        -> Vec<Line> {
         self.ensure_buffer_length(start_line_num + num_lines);
         self.cur_line = start_line_num;
         (&self.raw_lines[start_line_num..])
@@ -200,7 +203,7 @@ impl<B: BufRead> BufferedFilter<B> {
     }
 
     fn get_filtered_lines(&mut self, start_line_num: usize, num_lines: usize)
-        -> Vec<(usize, String)> {
+        -> Vec<Line> {
         if self.filter_string.is_none() {
             panic!("get_filtered_lines() called when filter_string is None");
         }
