@@ -6,8 +6,8 @@ extern crate clap;
 extern crate ncurses;
 extern crate libc;
 
-mod buffered_filter;
-mod pager;
+pub mod buffered_filter;
+pub mod pager;
 
 use std::char;
 use std::ffi::CString;
@@ -35,6 +35,99 @@ const BACKSPACE: i32 = 127;
 const MARGIN: i32 = 0;
 
 
+/// Returns a C-style string from a `&str`.
+fn get_cstring(string: &str) -> CString {
+    CString::new(string).unwrap()
+}
+
+/// Creates and returns an ncurses window which reads user input from tty
+/// (to avoid taking commands from a piped file) and writes to stdout.
+fn setup_term() -> SCREEN {
+    let tty;
+    let stdout;
+
+    unsafe {
+        tty = fopen(get_cstring("/dev/tty").as_ptr(),
+                        get_cstring("r").as_ptr());
+        stdout = fopen(get_cstring("/dev/stdout").as_ptr(),
+                           get_cstring("w").as_ptr());
+    }
+
+    let term = newterm(None, stdout, tty);
+    set_term(term);
+    noecho();
+    term
+}
+
+/// Presents a CLI and returns a boxed `std::io::BufRead` which enables
+/// line-wise reading of input from a file via the CLI or failing that from
+/// stdin.
+///
+/// ### Parameters
+/// * `_stdin`: standard input from which to read if user doesn't provide a file
+///   name
+fn get_input<'a>(_stdin: &'a std::io::Stdin) -> Box<BufRead + 'a> {
+      let matches = App::new("Filterless")
+          .version(env!("CARGO_PKG_VERSION"))
+          .author("Michael Wilson")
+          .about("Less, but with filtering")
+          .arg(Arg::with_name("INPUT")
+               .help("Sets the input file to use")
+               .required(false)
+               .index(1))
+          .get_matches();
+
+      match matches.value_of("INPUT") {
+          Some(fname) => {
+              let file = File::open(fname).unwrap();
+              let reader: BufReader<File> = BufReader::new(file);
+              Box::new(reader)
+          },
+          None => Box::new(_stdin.lock())
+      }
+}
+
+/// Event handler for when a user chooses to begin filtering text.
+///
+/// Spawns a single-line window at the bottom of the screen, collects user
+/// input, and returns it after user presses ENTER.
+///
+/// ### Parameters
+/// * `width`: width of the terminal in columns
+/// * `height`: height of the terminal in rows
+fn _filter(width: i32, height: i32) -> String {
+    let filter_win = newwin(1, width, height - 1, 0);
+    wprintw(filter_win, "Filter: ");
+    wrefresh(filter_win);
+    let mut filter_str = String::new();
+    loop {
+        match getch() {
+            ENTER => break,
+            BACKSPACE => {
+                match filter_str.pop() {
+                    Some(_) => {
+                        let mut x = 0;
+                        let mut y = 0;
+                        getyx(filter_win, &mut y, &mut x);
+                        wmove(filter_win, y, x - 1);
+                        wdelch(filter_win);
+                        wrefresh(filter_win);
+                    },
+                    None => {},
+                }
+            },
+            ch => {
+                filter_str.push(char::from_u32(ch as u32).unwrap());
+                waddch(filter_win, ch as chtype);
+                wrefresh(filter_win);
+            },
+        }
+    }
+    delwin(filter_win);
+    return filter_str;
+}
+
+/// System entry point
 fn main() {
     let _stdin = stdin();
     let reader = get_input(&_stdin);
@@ -74,76 +167,3 @@ fn main() {
     delscreen(window);
 }
 
-fn get_cstring(string: &str) -> CString {
-    CString::new(string).unwrap()
-}
-
-fn setup_term() -> SCREEN {
-    let tty;
-    let stdout;
-
-    unsafe {
-        tty = fopen(get_cstring("/dev/tty").as_ptr(),
-                        get_cstring("r").as_ptr());
-        stdout = fopen(get_cstring("/dev/stdout").as_ptr(),
-                           get_cstring("w").as_ptr());
-    }
-
-    let term = newterm(None, stdout, tty);
-    set_term(term);
-    noecho();
-    term
-}
-
-fn get_input<'a>(_stdin: &'a std::io::Stdin) -> Box<BufRead + 'a> {
-      let matches = App::new("Filterless")
-          .version(env!("CARGO_PKG_VERSION"))
-          .author("Michael Wilson")
-          .about("Less, but with filtering")
-          .arg(Arg::with_name("INPUT")
-               .help("Sets the input file to use")
-               .required(false)
-               .index(1))
-          .get_matches();
-
-      match matches.value_of("INPUT") {
-          Some(fname) => {
-              let file = File::open(fname).unwrap();
-              let reader: BufReader<File> = BufReader::new(file);
-              Box::new(reader)
-          },
-          None => Box::new(_stdin.lock())
-      }
-}
-
-fn _filter(width: i32, height: i32) -> String {
-    let filter_win = newwin(1, width, height - 1, 0);
-    wprintw(filter_win, "Filter: ");
-    wrefresh(filter_win);
-    let mut filter_str = String::new();
-    loop {
-        match getch() {
-            ENTER => break,
-            BACKSPACE => {
-                match filter_str.pop() {
-                    Some(_) => {
-                        let mut x = 0;
-                        let mut y = 0;
-                        getyx(filter_win, &mut y, &mut x);
-                        wmove(filter_win, y, x - 1);
-                        wdelch(filter_win);
-                        wrefresh(filter_win);
-                    },
-                    None => {},
-                }
-            },
-            ch => {
-                filter_str.push(char::from_u32(ch as u32).unwrap());
-                waddch(filter_win, ch as chtype);
-                wrefresh(filter_win);
-            },
-        }
-    }
-    delwin(filter_win);
-    return filter_str;
-}

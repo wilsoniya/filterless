@@ -53,7 +53,7 @@ impl<B: BufRead> BufferedFilter<B> {
         -> Vec<String> {
         let start_line = max(self.cur_line as i64 + offset, 0) as usize;
 
-        match self.filter_string {
+        let lines = match self.filter_string {
             Some(_) => {
                 self.ensure_index_length(start_line, num_lines);
                 let first_idx: usize;
@@ -88,17 +88,22 @@ impl<B: BufRead> BufferedFilter<B> {
                 self.ensure_buffer_length(buf_len as usize);
                 self.get_unfiltered_lines(start_line, num_lines)
             }
-        }
+        };
+        let digits = (self.raw_lines.len() as f32).log10().floor() as usize + 1;
+        lines.iter()
+            .map(|&(ref i, ref l)| format!("{:>2$} {}", i + 1, l, digits))
+            .collect()
     }
 
     pub fn ensure_buffer_length(&mut self, num_lines: usize) {
         if num_lines < self.raw_lines.len() {
+            // case: buffer already has enough lines
             return;
         }
 
         let mut total_lines = self.raw_lines.len();
         let remaining_lines = num_lines - total_lines;
-        let mut iter_lines: Vec<(usize, String)> = (&mut self.line_iter)
+        let mut new_lines: Vec<(usize, String)> = (&mut self.line_iter)
             .take(remaining_lines)
             .map(|line| {
                 let ret = (total_lines, line.unwrap());
@@ -106,17 +111,16 @@ impl<B: BufRead> BufferedFilter<B> {
                 ret
             })
             .collect();
-        self.raw_lines.append(&mut iter_lines);
+        self.raw_lines.append(&mut new_lines);
     }
 
     fn get_unfiltered_lines(&mut self, start_line_num: usize, num_lines: usize)
-        -> Vec<String> {
+        -> Vec<(usize, String)> {
         self.ensure_buffer_length(start_line_num + num_lines);
         self.cur_line = start_line_num;
         (&self.raw_lines[start_line_num..])
             .iter()
             .map(ToOwned::to_owned)
-            .map(|line| line.1)
             .take(num_lines)
             .collect()
     }
@@ -196,7 +200,7 @@ impl<B: BufRead> BufferedFilter<B> {
     }
 
     fn get_filtered_lines(&mut self, start_line_num: usize, num_lines: usize)
-        -> Vec<String> {
+        -> Vec<(usize, String)> {
         if self.filter_string.is_none() {
             panic!("get_filtered_lines() called when filter_string is None");
         }
@@ -208,7 +212,7 @@ impl<B: BufRead> BufferedFilter<B> {
             .map(|idx| self.raw_lines.get(*idx))
             .take(num_lines)
             .take_while(|line| line.is_some())
-            .map(|line| line.unwrap().1.clone())
+            .map(|line| line.unwrap().clone())
             .collect()
     }
 }
