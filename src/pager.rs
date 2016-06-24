@@ -91,7 +91,7 @@ impl<B:BufRead> Pager<B> {
         let buf_len = self.filter.as_ref().unwrap().get_buffer_length();
         let num_digits = (buf_len as f32).log10().floor() as usize + 1;
 
-        for &(ref line_num, ref line) in lines.iter() {
+        for (disp_num, &(ref line_num, ref line)) in lines.iter().enumerate() {
             // unconditionally print line number
             ncurses::wattron(self.window, ncurses::COLOR_PAIR(2) as i32);
             ncurses::wprintw(self.window,
@@ -114,9 +114,11 @@ impl<B:BufRead> Pager<B> {
                 None => {
                     ncurses::wprintw(self.window, line);
                 },
-            }
+            };
 
-            ncurses::wprintw(self.window, "\n");
+            if disp_num < lines.len() - 1 {
+                ncurses::wprintw(self.window, "\n");
+            };
         }
 
         ncurses::wrefresh(self.window);

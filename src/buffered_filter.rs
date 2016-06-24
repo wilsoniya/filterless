@@ -56,6 +56,15 @@ impl<B: BufRead> BufferedFilter<B> {
         self.raw_lines.len()
     }
 
+    pub fn get_line(&mut self, line_num: usize) -> Option<Line> {
+        self.ensure_buffer_length(line_num + 1);
+
+        match self.raw_lines.get(line_num) {
+            Some(line) => Some((*line).clone()),
+            None => None,
+        }
+    }
+
     pub fn offset_to_lines(&mut self, offset: i64, num_lines: usize)
         -> Vec<Line> {
         let start_line = max(self.cur_line as i64 + offset, 0) as usize;
@@ -119,13 +128,24 @@ impl<B: BufRead> BufferedFilter<B> {
 
     fn get_unfiltered_lines(&mut self, start_line_num: usize, num_lines: usize)
         -> Vec<Line> {
-        self.ensure_buffer_length(start_line_num + num_lines);
-        self.cur_line = start_line_num;
-        (&self.raw_lines[start_line_num..])
-            .iter()
-            .map(ToOwned::to_owned)
-            .take(num_lines)
-            .collect()
+        let buf_len = self.raw_lines.len();
+        if buf_len > 0 {
+            // case: buffered lines contains > 0 elts
+            let start_line_num: usize = match start_line_num < buf_len {
+                true => start_line_num,
+                false => self.raw_lines.len() - 1,
+            };
+            self.ensure_buffer_length(start_line_num + num_lines);
+            self.cur_line = start_line_num;
+            (&self.raw_lines[start_line_num..])
+                .iter()
+                .map(ToOwned::to_owned)
+                .take(num_lines)
+                .collect()
+        } else {
+            // case: no buffered lines to be had; return empty buffer
+            Vec::new()
+        }
     }
 
     fn ensure_index_length(&mut self, start_line_num: usize,
