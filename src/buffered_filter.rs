@@ -1,8 +1,8 @@
+use std::cmp::max;
 use std::collections::{Bound, BTreeSet};
 use std::io::BufRead;
 use std::io::Lines;
 use std::io::{stderr, Write};
-use std::cmp::max;
 
 /// A 2-tuple of line number and content string
 pub type Line = (usize, String);
@@ -75,7 +75,7 @@ impl<B: BufRead> BufferedFilter<B> {
                 let first_idx: usize;
                 {
                     let idx = self.filter_line_indices
-                        .range(Bound::Unbounded, Bound::Unbounded)
+                        .range((Bound::Unbounded::<usize>, Bound::Unbounded::<usize>))
                         .nth(start_line);
                     first_idx = match idx {
                         Some(_idx) => {
@@ -154,7 +154,7 @@ impl<B: BufRead> BufferedFilter<B> {
             panic!("ensure_index_length() called when filter_string is None");
         }
         let remaining_idx_size = self.filter_line_indices
-            .range(Bound::Included(&start_line_num), Bound::Unbounded)
+            .range((Bound::Included(&start_line_num), Bound::Unbounded::<&usize>))
             .count();
 
         if remaining_idx_size < additional_matches {
@@ -231,7 +231,7 @@ impl<B: BufRead> BufferedFilter<B> {
         self.ensure_index_length(start_line_num, num_lines);
 
         self.filter_line_indices
-            .range(Bound::Included(&start_line_num), Bound::Unbounded)
+            .range((Bound::Included(&start_line_num), Bound::Unbounded::<&usize>))
             .map(|idx| self.raw_lines.get(*idx))
             .take(num_lines)
             .take_while(|line| line.is_some())
