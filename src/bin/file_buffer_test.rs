@@ -32,6 +32,10 @@ impl<B: BufRead> FilteringLineBuffer<B> {
     }
 
     /// Gets the `line_num`th line as read off the input lines.
+    ///
+    /// ### Parameters
+    /// * `line_num`: 1-indexed index of the line of the underlying buffer to
+    ///   return
     pub fn get(&mut self, line_num: usize) -> Option<String> {
         let mut last_line_num = self.cached_lines.len();
 
@@ -58,7 +62,7 @@ pub struct FilteringLineIter<'a, B: 'a + BufRead> {
     /// criteria on which lines are filtered, if any
     filter: Option<FilterPredicate>,
     /// last line fetched from underlying buffer
-    last_line: usize,
+    last_line: Option<usize>,
     /// `true` when underlying buffer is exhausted
     buffer_exhausted: bool
 }
@@ -70,27 +74,30 @@ impl<'a, B: BufRead + 'a> FilteringLineIter<'a, B> {
             buffer: buffer,
             offset: offset,
             filter: filter,
-            last_line: 0,
+            last_line: None,
             buffer_exhausted: false
         }
     }
 }
 
 impl<'a, B: BufRead + 'a> Iterator for FilteringLineIter<'a, B> {
-    type Item = (usize, FilteredLine);
+    type Item = FilteredLine;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.buffer_exhausted {
             None
         } else {
-            let line_num = self.last_line + 1;
-            match self.buffer.get(line_num) {
-                Some(line) => {
-                    self.last_line = line_num;
-                    Some((line_num, FilteredLine::MatchLine(line)))
-                },
-                None => None
-            }
+            let line_num = self.last_line.unwrap_or(self.offset) + 1;
+
+            let ret = self.buffer.get(line_num)
+                .map(|line| {
+                    self.last_line = Some(line_num);
+                    FilteredLine::MatchLine((line_num, line))
+                });
+
+            self.buffer_exhausted = ret.is_none();
+
+            ret
         }
     }
 }
@@ -104,10 +111,17 @@ pub struct FilterPredicate {
     pub context_lines: usize ,
 }
 
+pub type NumberedLine = (usize, String);
+
+/// Representation of a line that might be returned from a filtering iterator.
 pub enum FilteredLine {
+    /// a gap between context groups (i.e., groups of context lines
+    /// corresponding to distinct match lines)
     Gap,
-    ContextLine(String),
-    MatchLine(String),
+    /// a line which provides context before or after a matched line
+    ContextLine(NumberedLine),
+    /// a line matched by a filter string
+    MatchLine(NumberedLine),
 }
 
 //impl<B: BufRead> Iterator for FilteringLineBuffer<B> {
