@@ -71,6 +71,7 @@ impl<B: BufRead> BufferedFilter<B> {
 
         match self.filter_string {
             Some(_) => {
+                // case: filter string exists
                 self.ensure_index_length(start_line, num_lines);
                 let first_idx: usize;
                 {
@@ -79,6 +80,7 @@ impl<B: BufRead> BufferedFilter<B> {
                         .nth(start_line);
                     first_idx = match idx {
                         Some(_idx) => {
+                            // case: found a start_line'th match of filter string
                             self.cur_line = start_line;
                             *_idx
                         },
