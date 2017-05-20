@@ -18,6 +18,7 @@ pub struct FilterPredicate {
 pub type NumberedLine = (usize, String);
 
 /// Representation of a line that might be returned from a filtering iterator.
+#[derive(Debug)]
 pub enum FilteredLine {
     /// a gap between context groups (i.e., groups of context lines
     /// corresponding to distinct match lines)
@@ -90,7 +91,7 @@ impl<B: BufRead> Iterator for FilteringLineBuffer<B> {
             // TODO: what happens when lines are read as Err()?
             let line = line.unwrap();
             let line_copy = line.clone();
-            let line_num = self.cached_lines.len() + 2;
+            let line_num = self.cached_lines.len() + 1;
             self.cached_lines.push((line_num, line));
             (line_num, line_copy)
         })
@@ -133,25 +134,32 @@ impl<'a, B: BufRead + 'a> Iterator for FilteringLineIter<'a, B> {
         } else {
             let line_num = self.last_line + 1;
 
+            let mut returned_line_idx = self.last_line;
+
             let filter_copy = self.filter.clone();
             let ret = filter_copy.map(|pred| {
                 // case: active filter predicate; filter lines
-                ((line_num + 1)..)
+                (line_num..)
                     .map(|i| self.buffer.get(i))
+                    .take_while(|i| i.is_some())
                     .filter_map(|i| i)
                     .skip_while(|&(_, ref line)| !line.contains(&pred.filter_string))
-                    .map(|line| FilteredLine::MatchLine(line))
+                    .map(|line| {
+                        returned_line_idx = line.0;
+                        FilteredLine::MatchLine(line)
+                    })
                     .nth(0)
             })
             .unwrap_or_else(|| {
                 // case: no active filter predicate; emit all lines
                 self.buffer.get(line_num)
                     .map(|line| {
-                        self.last_line = line_num;
+                        returned_line_idx = line_num;
                         FilteredLine::UnfilteredLine(line)
                     })
             });
 
+            self.last_line = returned_line_idx;
             self.buffer_exhausted = ret.is_none();
             ret
         }
@@ -163,5 +171,9 @@ fn main() {
     let reader = BufReader::new(file);
 
     let mut buffer = FilteringLineBuffer::new(reader);
-    let iter = buffer.iter(0, None);
+    let pred = FilterPredicate { filter_string: "the".to_owned(), context_lines: 0 };
+    let iter = buffer.iter(0, Some(pred));
+//  let iter = buffer.iter(0, None);
+
+    println!("{:?}", iter.collect::<Vec<FilteredLine>>());
 }
