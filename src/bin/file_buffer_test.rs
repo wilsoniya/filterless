@@ -2,7 +2,33 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Lines, Result};
 use std::iter::Iterator;
 
-static FNAME: &'static str = "/home/wilsoniya/devel/filterless/test";
+//static FNAME: &'static str = "/home/wilsoniya/devel/filterless/test";
+static FNAME: &'static str = "/home/wilsoniya/devel/filterless/pg730.txt";
+
+/// Parameters used when creating a filtering iterator
+#[derive(Clone)]
+pub struct FilterPredicate {
+    /// Search string which must be included in a line to be considered a match
+    pub filter_string: String,
+    /// Number of non-match lines above and below a match line to include in
+    /// the lines returned by the iterator
+    pub context_lines: usize ,
+}
+
+pub type NumberedLine = (usize, String);
+
+/// Representation of a line that might be returned from a filtering iterator.
+pub enum FilteredLine {
+    /// a gap between context groups (i.e., groups of context lines
+    /// corresponding to distinct match lines)
+    Gap,
+    /// a line which provides context before or after a matched line
+    ContextLine(NumberedLine),
+    /// a line matched by a filter string
+    MatchLine(NumberedLine),
+    /// a line emitted when no filter predicate is in use
+    UnfilteredLine(NumberedLine),
+}
 
 /// Thing which reads, caches, and makes filterable lines produced by linewise
 /// iterators.
@@ -132,31 +158,6 @@ impl<'a, B: BufRead + 'a> Iterator for FilteringLineIter<'a, B> {
     }
 }
 
-/// Parameters used when creating a filtering iterator
-#[derive(Clone)]
-pub struct FilterPredicate {
-    /// Search string which must be included in a line to be considered a match
-    pub filter_string: String,
-    /// Number of non-match lines above and below a match line to include in
-    /// the lines returned by the iterator
-    pub context_lines: usize ,
-}
-
-pub type NumberedLine = (usize, String);
-
-/// Representation of a line that might be returned from a filtering iterator.
-pub enum FilteredLine {
-    /// a gap between context groups (i.e., groups of context lines
-    /// corresponding to distinct match lines)
-    Gap,
-    /// a line which provides context before or after a matched line
-    ContextLine(NumberedLine),
-    /// a line matched by a filter string
-    MatchLine(NumberedLine),
-    /// a line emitted when no filter predicate is in use
-    UnfilteredLine(NumberedLine),
-}
-
 fn main() {
     let file = File::open(FNAME).unwrap();
     let reader = BufReader::new(file);
@@ -164,10 +165,3 @@ fn main() {
     let mut buffer = FilteringLineBuffer::new(reader);
     let iter = buffer.iter(0, None);
 }
-
-fn get_file() -> Result<File> {
-    let file = File::open(FNAME)?;
-
-    Ok(file)
-}
-
