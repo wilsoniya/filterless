@@ -141,8 +141,8 @@ impl<'a, B: BufRead + 'a> Iterator for FilteringLineIter<'a, B> {
                 // case: active filter predicate; filter lines
                 (line_num..)
                     .map(|i| self.buffer.get(i))
-                    .take_while(|i| i.is_some())
-                    .filter_map(|i| i)
+                    .take_while(|maybe_line| maybe_line.is_some())
+                    .filter_map(|maybe_line| maybe_line)
                     .skip_while(|&(_, ref line)| !line.contains(&pred.filter_string))
                     .map(|line| {
                         returned_line_idx = line.0;
