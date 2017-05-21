@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Lines, Result};
 use std::iter::Iterator;
@@ -29,6 +30,17 @@ pub enum FilteredLine {
     MatchLine(NumberedLine),
     /// a line emitted when no filter predicate is in use
     UnfilteredLine(NumberedLine),
+}
+
+impl FilteredLine {
+    pub fn get_line_num(&self) -> Option<usize> {
+        match self {
+            &FilteredLine::Gap => None,
+            &FilteredLine::ContextLine((line_num, _)) => Some(line_num),
+            &FilteredLine::MatchLine((line_num, _)) => Some(line_num),
+            &FilteredLine::UnfilteredLine((line_num, _)) => Some(line_num),
+        }
+    }
 }
 
 /// Thing which reads, caches, and makes filterable lines produced by linewise
@@ -107,11 +119,13 @@ pub struct FilteringLineIter<'a, B: 'a + BufRead> {
     /// last line fetched from underlying buffer
     last_line: usize,
     /// `true` when underlying buffer is exhausted
-    buffer_exhausted: bool
+    buffer_exhausted: bool,
+    /// elements buffered
+    context_buffer: VecDeque<Option<NumberedLine>>,
 }
 
 impl<'a, B: BufRead + 'a> FilteringLineIter<'a, B> {
-    fn new(buffer: &'a mut FilteringLineBuffer<B>, offset: usize,
+    pub fn new(buffer: &'a mut FilteringLineBuffer<B>, offset: usize,
            filter: Option<FilterPredicate>) -> FilteringLineIter<'a, B> {
         let last_line = offset;
 
@@ -120,8 +134,41 @@ impl<'a, B: BufRead + 'a> FilteringLineIter<'a, B> {
             offset: offset,
             filter: filter,
             last_line: last_line,
-            buffer_exhausted: false
+            buffer_exhausted: false,
+            context_buffer: VecDeque::new(),
         }
+    }
+
+    fn next_unfiltered(&mut self) -> Option<FilteredLine> {
+        let line_num = self.last_line + 1;
+
+        self.buffer.get(line_num)
+            .map(|line| {
+                self.last_line = line_num;
+                FilteredLine::UnfilteredLine(line)
+            })
+    }
+
+    fn next_filtered_without_context(
+        &mut self, pred: &FilterPredicate) -> Option<FilteredLine> {
+        let line_num = self.last_line + 1;
+
+        let ret = (line_num..)
+            .map(|i| self.buffer.get(i))
+            .take_while(|maybe_line| maybe_line.is_some())
+            .filter_map(|maybe_line| maybe_line)
+            .skip_while(|&(_, ref line)| !line.contains(&pred.filter_string))
+            .map(|line| {
+                FilteredLine::MatchLine(line)
+            })
+        .nth(0);
+
+        self.last_line = ret
+            .as_ref()
+            .and_then(|filtered_line| filtered_line.get_line_num())
+            .unwrap_or(self.last_line);
+
+        ret
     }
 }
 
@@ -134,34 +181,38 @@ impl<'a, B: BufRead + 'a> Iterator for FilteringLineIter<'a, B> {
         } else {
             let line_num = self.last_line + 1;
 
-            let mut returned_line_idx = self.last_line;
-
+            // clone because closure closes over self to access pred
             let filter_copy = self.filter.clone();
             let ret = filter_copy.map(|pred| {
                 // case: active filter predicate; filter lines
-                (line_num..)
-                    .map(|i| self.buffer.get(i))
-                    .take_while(|maybe_line| maybe_line.is_some())
-                    .filter_map(|maybe_line| maybe_line)
-                    .skip_while(|&(_, ref line)| !line.contains(&pred.filter_string))
-                    .map(|line| {
-                        returned_line_idx = line.0;
-                        FilteredLine::MatchLine(line)
-                    })
-                    .nth(0)
+                self.next_filtered_without_context(&pred)
             })
             .unwrap_or_else(|| {
                 // case: no active filter predicate; emit all lines
-                self.buffer.get(line_num)
-                    .map(|line| {
-                        returned_line_idx = line_num;
-                        FilteredLine::UnfilteredLine(line)
-                    })
+                self.next_unfiltered()
             });
 
-            self.last_line = returned_line_idx;
             self.buffer_exhausted = ret.is_none();
             ret
+        }
+    }
+}
+
+/// Buffer for providing visibility into past, present, and future lines.
+pub struct ContextBuffer<T: Iterator> {
+    context_lines: usize,
+    buffer: VecDeque<Option<NumberedLine>>,
+    iter: T,
+}
+
+impl<T: Iterator> ContextBuffer<T> {
+    fn new(context_lines: usize, iter: T) -> ContextBuffer<T> {
+        let capacity = context_lines * 2 + 1;
+        let buffer = VecDeque::with_capacity(capacity);
+        ContextBuffer {
+            context_lines: context_lines,
+            buffer,
+            iter: iter,
         }
     }
 }
@@ -171,7 +222,7 @@ fn main() {
     let reader = BufReader::new(file);
 
     let mut buffer = FilteringLineBuffer::new(reader);
-    let pred = FilterPredicate { filter_string: "the".to_owned(), context_lines: 0 };
+    let pred = FilterPredicate { filter_string: "OLIVER".to_owned(), context_lines: 0 };
     let iter = buffer.iter(0, Some(pred));
 //  let iter = buffer.iter(0, None);
 
