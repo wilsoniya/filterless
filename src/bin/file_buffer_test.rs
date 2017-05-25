@@ -19,7 +19,7 @@ pub struct FilterPredicate {
 pub type NumberedLine = (usize, String);
 
 /// Representation of a line that might be returned from a filtering iterator.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum FilteredLine {
     /// a gap between context groups (i.e., groups of context lines
     /// corresponding to distinct match lines)
@@ -242,7 +242,7 @@ struct ContextBuffer<'a, T: Iterator + 'a> {
     iter: &'a mut T,
 }
 
-impl<'a, T: Iterator<Item = NumberedLine> + 'a> ContextBuffer<'a, T> {
+impl<'a, T: Iterator<Item = &'a NumberedLine> + 'a> ContextBuffer<'a, T> {
     fn new(context_lines: usize, filter_string: String,
            iter: &'a mut T) -> ContextBuffer<'a, T> {
         let initial_contents = context_lines + 1;
@@ -269,7 +269,7 @@ impl<'a, T: Iterator<Item = NumberedLine> + 'a> ContextBuffer<'a, T> {
         let mut tail_buf = repeat(None)
             .take(blanks)
             .chain(self.iter.map(|numbered_line| {
-                Some(ContextLine::from_numbered_line(numbered_line, &filter_string))
+                Some(ContextLine::from_numbered_line(numbered_line.to_owned(), &filter_string))
             }))
             .chain(repeat(None))
             .take(num_add)
@@ -306,18 +306,12 @@ impl<'a, T: Iterator<Item = NumberedLine> + 'a> ContextBuffer<'a, T> {
     }
 }
 
-impl<'a, T: Iterator<Item = NumberedLine> + 'a> Iterator for ContextBuffer<'a, T> {
+impl<'a, T: Iterator<Item = &'a NumberedLine> + 'a> Iterator for ContextBuffer<'a, T> {
     type Item = FilteredLine;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let cur_idx = self.context_lines;
-        self.buffer.get(cur_idx)
-            .map(|maybe_line| maybe_line.to_owned())
-            .and_then(|maybe_line| {
-                maybe_line.map(|line| {
-                    FilteredLine::MatchLine(line.get_line())
-                })
-            })
+        self.fill_buffer();
+        self.classify_cur_line()
     }
 }
 
@@ -328,7 +322,48 @@ fn main() {
     let mut buffer = FilteringLineBuffer::new(reader);
     let pred = FilterPredicate { filter_string: "OLIVER".to_owned(), context_lines: 0 };
     let iter = buffer.iter(0, Some(pred));
-//  let iter = buffer.iter(0, None);
 
     println!("{:?}", iter.collect::<Vec<FilteredLine>>());
+}
+
+#[cfg(test)]
+mod test {
+    use ::ContextBuffer;
+    use ::FilteredLine;
+
+    #[test]
+    fn test1() {
+        let mut lines: Vec<(usize, String)> = vec![
+            (1, "ctx".to_owned()),
+            (2, "ctx".to_owned()),
+            (3, "match".to_owned()),
+            (4, "ctx".to_owned()),
+            (5, "ctx".to_owned()),
+            (6, "none".to_owned()),
+            (7, "none".to_owned()),
+        ];
+        let context_lines = 2;
+        let filter_string = "match".to_owned();
+        let mut iter = lines.iter();
+
+        let mut cb = ContextBuffer::new(
+            context_lines, filter_string, &mut iter);
+
+        let e1 = cb.next();
+        assert!(e1 == Some(FilteredLine::ContextLine((1, String::from("ctx")))));
+        let e2 = cb.next();
+        assert!(e2 == Some(FilteredLine::ContextLine((2, String::from("ctx")))));
+        let e3 = cb.next();
+        assert!(e3 == Some(FilteredLine::MatchLine((3, String::from("match")))));
+        let e4 = cb.next();
+        assert!(e4 == Some(FilteredLine::ContextLine((4, String::from("ctx")))));
+        let e5 = cb.next();
+        assert!(e5 == Some(FilteredLine::ContextLine((5, String::from("ctx")))));
+        let e6 = cb.next();
+        assert!(e6 == Some(FilteredLine::Gap));
+        let e7 = cb.next();
+        assert!(e7 == None);
+        let e8 = cb.next();
+        assert!(e8 == None);
+    }
 }
