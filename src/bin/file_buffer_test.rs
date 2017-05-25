@@ -278,32 +278,32 @@ impl<'a, T: Iterator<Item = NumberedLine> + 'a> ContextBuffer<'a, T> {
         self.buffer.append(&mut tail_buf);
     }
 
-//    fn classify_cur_line(&self) -> Option<FilteredLine> {
-//        let matches = self.buffer.iter().map(|maybe_line| {
-//            match maybe_line {
-//                &Some(FilteredLine::MatchLine(_)) => true,
-//                _ => false,
-//            }
-//        }).collect::<Vec<bool>>();
-//
-//        let cur_idx = self.context_lines;
-//        self.buffer.get(cur_idx)
-//            .and_then(|maybe_context_line| {
-//                maybe_context_line.map(|context_line| {
-//                    let line = context_line.get_line();
-//                    let is_match = matches[cur_idx];
-//                    let is_context = !is_match && matches.any(|m| m);
-//
-//                    if is_match {
-//                        FilteredLine::MatchLine(line)
-//                    } else if is_context {
-//                        FilteredLine::ContextLine(line)
-//                    } else {
-//                        FilteredLine::Gap
-//                    }
-//                })
-//            })
-//    }
+    fn classify_cur_line(&self) -> Option<FilteredLine> {
+        let matches = self.buffer.iter().map(|maybe_line| {
+            match maybe_line {
+                &Some(ContextLine::Match(_)) => true,
+                _ => false,
+            }
+        }).collect::<Vec<bool>>();
+
+        let cur_idx = self.context_lines;
+        self.buffer.get(cur_idx)
+            .and_then(|maybe_context_line| {
+                maybe_context_line.as_ref().map(|context_line| {
+                    let line = context_line.get_line();
+                    let is_match = *matches.get(cur_idx).unwrap_or(&false);
+                    let is_context = !is_match && matches.iter().any(|m| *m);
+
+                    if is_match {
+                        FilteredLine::MatchLine(line)
+                    } else if is_context {
+                        FilteredLine::ContextLine(line)
+                    } else {
+                        FilteredLine::Gap
+                    }
+                })
+            })
+    }
 }
 
 impl<'a, T: Iterator<Item = NumberedLine> + 'a> Iterator for ContextBuffer<'a, T> {
