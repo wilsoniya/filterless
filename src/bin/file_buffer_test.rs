@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Lines, Result};
-use std::iter::Iterator;
+use std::iter::{Iterator, repeat};
 
 //static FNAME: &'static str = "/home/wilsoniya/devel/filterless/test";
 static FNAME: &'static str = "/home/wilsoniya/devel/filterless/pg730.txt";
@@ -19,7 +19,7 @@ pub struct FilterPredicate {
 pub type NumberedLine = (usize, String);
 
 /// Representation of a line that might be returned from a filtering iterator.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum FilteredLine {
     /// a gap between context groups (i.e., groups of context lines
     /// corresponding to distinct match lines)
@@ -39,6 +39,15 @@ impl FilteredLine {
             &FilteredLine::ContextLine((line_num, _)) => Some(line_num),
             &FilteredLine::MatchLine((line_num, _)) => Some(line_num),
             &FilteredLine::UnfilteredLine((line_num, _)) => Some(line_num),
+        }
+    }
+
+    pub fn get_line(&self) -> Option<String> {
+        match self {
+            &FilteredLine::Gap => None,
+            &FilteredLine::ContextLine((_, ref line)) => Some(line.to_owned()),
+            &FilteredLine::MatchLine((_, ref line)) => Some(line.to_owned()),
+            &FilteredLine::UnfilteredLine((_, ref line)) => Some(line.to_owned()),
         }
     }
 }
@@ -151,9 +160,9 @@ impl<'a, B: BufRead + 'a> FilteringLineIter<'a, B> {
 
     fn next_filtered_without_context(
         &mut self, pred: &FilterPredicate) -> Option<FilteredLine> {
-        let line_num = self.last_line + 1;
+        let cur_line_num = self.last_line + 1;
 
-        let ret = (line_num..)
+        let ret = (cur_line_num..)
             .map(|i| self.buffer.get(i))
             .take_while(|maybe_line| maybe_line.is_some())
             .filter_map(|maybe_line| maybe_line)
@@ -198,22 +207,98 @@ impl<'a, B: BufRead + 'a> Iterator for FilteringLineIter<'a, B> {
     }
 }
 
-/// Buffer for providing visibility into past, present, and future lines.
-pub struct ContextBuffer<T: Iterator> {
+/// Buffer for providing visibility into past, present, and future lines
+/// produced by an iterator.
+///
+/// Internally it stores a deque containing lines read from an underlying
+/// iterator, with the deque taking the size 2 * `context_lines` + 1. This size
+/// allows the deque to store `context_lines` past lines, one line
+/// representing the "current" line, and `context_lines` future lines. New
+/// lines are pushed to the back of the deque and old lines are popped from the
+/// beginning. In this way the "current" line always resides in the exact
+/// middle of the deque.
+struct ContextBuffer<'a, T: Iterator + 'a> {
+    /// number of lines to display before and after matched lines
     context_lines: usize,
-    buffer: VecDeque<Option<NumberedLine>>,
-    iter: T,
+    /// string whose presence in iterator lines indicates a match
+    filter_string: String,
+    /// earlier lines in lower indexes
+    buffer: VecDeque<Option<FilteredLine>>,
+    /// underlying iterator
+    iter: &'a mut T,
 }
 
-impl<T: Iterator> ContextBuffer<T> {
-    fn new(context_lines: usize, iter: T) -> ContextBuffer<T> {
+impl<'a, T: Iterator<Item = NumberedLine> + 'a> ContextBuffer<'a, T> {
+    fn new(context_lines: usize, filter_string: String,
+           iter: &'a mut T) -> ContextBuffer<'a, T> {
+        let initial_contents = context_lines + 1;
         let capacity = context_lines * 2 + 1;
-        let buffer = VecDeque::with_capacity(capacity);
+        let buffer = repeat(None)
+            .take(context_lines)
+            .chain(iter.map(|item| {
+                Some(Self::classify_line(item, &filter_string))
+            }))
+            .chain(repeat(None))
+            .take(capacity)
+            .collect();
+
         ContextBuffer {
             context_lines: context_lines,
-            buffer,
+            filter_string: filter_string,
+            buffer: buffer,
             iter: iter,
         }
+    }
+
+    fn classify_line(line: NumberedLine, filter_string: &String) -> FilteredLine {
+        if line.1.contains(filter_string) {
+            FilteredLine::MatchLine(line)
+        } else {
+            FilteredLine::ContextLine(line)
+        }
+    }
+
+    fn classify_cur_line(&self) -> Option<FilteredLine> {
+        let matches = self.buffer.iter().map(|maybe_line| {
+            match maybe_line {
+                &Some(FilteredLine::MatchLine(_)) => true,
+                _ => false,
+            }
+        }).collect::<Vec<bool>>();
+
+        let cur_idx = self.context_lines;
+        self.buffer.get(cur_idx)
+            .and_then(|maybe_filtered_line| {
+                maybe_filtered_line.and_then(|filtered_line| {
+                    filtered_line.get_line().map(|line| {
+                        let is_match = matches[cur_idx];
+                        let is_context = !is_match && matches.any(|m| m);
+
+                        if is_match {
+                            FilteredLine::MatchLine(line)
+                        } else if is_context {
+                            FilteredLine::ContextLine(line)
+                        } else {
+                            FilteredLine::Gap
+                        }
+                    })
+                })
+            })
+    }
+}
+
+impl<'a, T: Iterator<Item = NumberedLine> + 'a> Iterator for ContextBuffer<'a, T> {
+    type Item = FilteredLine;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let cur_idx = self.context_lines;
+        self.buffer.get(cur_idx)
+            .map(|maybe_line| maybe_line.to_owned())
+            .and_then(|maybe_line| {
+                maybe_line.map(|line| {
+                    line
+                })
+            })
     }
 }
 
