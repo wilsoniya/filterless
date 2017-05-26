@@ -32,7 +32,7 @@ pub enum FilteredLine {
     UnfilteredLine(NumberedLine),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum ContextLine {
     Match(NumberedLine),
     NoMatch(NumberedLine),
@@ -247,7 +247,14 @@ impl<'a, T: Iterator<Item = &'a NumberedLine> + 'a> ContextBuffer<'a, T> {
            iter: &'a mut T) -> ContextBuffer<'a, T> {
         let initial_contents = context_lines + 1;
         let capacity = context_lines * 2 + 1;
-        let buffer = VecDeque::with_capacity(capacity);
+        let buffer = repeat(None)
+            .take(context_lines + 1)
+            .chain(iter.map(|numbered_line| {
+                Some(ContextLine::from_numbered_line(numbered_line.to_owned(), &filter_string))
+            }))
+            .chain(repeat(None))
+            .take(capacity)
+            .collect();
 
         ContextBuffer {
             context_lines: context_lines,
@@ -257,26 +264,104 @@ impl<'a, T: Iterator<Item = &'a NumberedLine> + 'a> ContextBuffer<'a, T> {
         }
     }
 
-    fn fill_buffer(&mut self) {
-        self.buffer.pop_front();
+//    fn fill_buffer(&mut self) {
+//        let contains_match = self.buffer.iter()
+//            .map(|maybe_elt| {
+//                match maybe_elt {
+//                    &Some(ContextLine::Match(_)) => true,
+//                    _ => false,
+//                }
+//            })
+//            .any(|m| m);
+//
+//        if !contains_match {
+//            self.buffer.clear();
+//        }
+//    }
 
-        let capacity = self.context_lines * 2 + 1;
-        let num_elts = self.buffer.len();
-        let num_add = capacity - num_elts;
-        let blanks = if num_elts > 0 { 0 } else { self.context_lines };
-
-        let filter_string = self.filter_string.clone();
-        let mut tail_buf = repeat(None)
-            .take(blanks)
-            .chain(self.iter.map(|numbered_line| {
-                Some(ContextLine::from_numbered_line(numbered_line.to_owned(), &filter_string))
-            }))
-            .chain(repeat(None))
-            .take(num_add)
-            .collect();
-
-        self.buffer.append(&mut tail_buf);
+    fn buffer_has_matches(&self) -> bool {
+        self.buffer.iter()
+            .map(|maybe_elt| {
+                match maybe_elt {
+                    &Some(ContextLine::Match(_)) => true,
+                    _ => false,
+                }
+            })
+            .any(|m| m)
     }
+
+    fn fill_buffer(&mut self) {
+        let filter_string = self.filter_string.clone();
+        let item = self.iter.next().map(|numbered_line| {
+            ContextLine::from_numbered_line(numbered_line.to_owned(),
+                                            &filter_string)
+        });
+        self.buffer.pop_front();
+        self.buffer.push_back(item);
+
+        while !self.buffer_has_matches() {
+            if let Some(numbered_line) = self.iter.next() {
+                let context_line = ContextLine::from_numbered_line(
+                    numbered_line.to_owned(), &filter_string);
+                self.buffer.push_back(Some(context_line));
+                self.buffer.pop_front();
+            } else {
+                self.buffer.clear();
+                break;
+            }
+        }
+    }
+
+//    fn fill_buffer(&mut self) {
+//        let capacity = self.context_lines * 2 + 1;
+//        let filter_string = self.filter_string.clone();
+//
+//        let contains_match = self.buffer_has_matches();
+//
+//        let mut tail_buf = if contains_match {
+//            self.buffer.pop_front();
+//            let num_elts = self.buffer.len();
+//            let num_add = capacity - num_elts;
+//            let blanks = if num_elts > 0 { 0 } else { self.context_lines };
+//
+//            repeat(None)
+//                .take(blanks)
+//                .chain(self.iter.map(|numbered_line| {
+//                    Some(ContextLine::from_numbered_line(numbered_line.to_owned(), &filter_string))
+//                }))
+//                .chain(repeat(None))
+//                .take(num_add)
+//                .collect()
+//        } else {
+//            let mut tail_buf: VecDeque<Option<ContextLine>> = VecDeque::with_capacity(capacity);
+//            let mut iter = self.iter
+//                .map(|line| ContextLine::from_numbered_line(line.to_owned(), &filter_string));
+//
+//            while let Some(context_line) = iter.next() {
+//                match context_line {
+//                    ContextLine::Match(_) => {
+//                        tail_buf.push_back(Some(context_line));
+//                        break;
+//                    },
+//                    ContextLine::NoMatch(_) => {
+//                        tail_buf.push_back(Some(context_line));
+//                        continue;
+//                    },
+//                }
+//            }
+//
+//            tail_buf
+//        };
+//
+//        self.buffer.append(&mut tail_buf);
+//
+//        if self.buffer.len() > capacity {
+//            let num_drop = self.buffer.len() - capacity;
+//            self.buffer = self.buffer.split_off(num_drop);
+//        }
+//
+////      println!("{:?}", self.buffer);
+//    }
 
     fn classify_cur_line(&self) -> Option<FilteredLine> {
         let matches = self.buffer.iter().map(|maybe_line| {
@@ -293,6 +378,8 @@ impl<'a, T: Iterator<Item = &'a NumberedLine> + 'a> ContextBuffer<'a, T> {
                     let line = context_line.get_line();
                     let is_match = *matches.get(cur_idx).unwrap_or(&false);
                     let is_context = !is_match && matches.iter().any(|m| *m);
+
+                    println!("{:?}", line);
 
                     if is_match {
                         FilteredLine::MatchLine(line)
@@ -341,6 +428,9 @@ mod test {
             (5, "ctx".to_owned()),
             (6, "none".to_owned()),
             (7, "none".to_owned()),
+            (8, "ctx".to_owned()),
+            (9, "ctx".to_owned()),
+            (10, "match".to_owned()),
         ];
         let context_lines = 2;
         let filter_string = "match".to_owned();
@@ -362,8 +452,10 @@ mod test {
         let e6 = cb.next();
         assert!(e6 == Some(FilteredLine::Gap));
         let e7 = cb.next();
-        assert!(e7 == None);
+        assert!(e7 == Some(FilteredLine::ContextLine((8, String::from("ctx")))));
         let e8 = cb.next();
-        assert!(e8 == None);
+        assert!(e8 == Some(FilteredLine::ContextLine((9, String::from("ctx")))));
+        let e9 = cb.next();
+        assert!(e9 == Some(FilteredLine::MatchLine((10, String::from("match")))));
     }
 }
