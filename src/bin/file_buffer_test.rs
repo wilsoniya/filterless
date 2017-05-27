@@ -236,6 +236,40 @@ impl<'a, B: BufRead + 'a> Iterator for FilteringLineIter<'a, B> {
     }
 }
 
+//struct SmartContextBuffer {
+//    /// number of lines to display before and after matched lines
+//    context_lines: usize,
+//    /// string whose presence in iterator lines indicates a match
+//    filter_string: String,
+//    /// earlier lines in lower indexes
+//    buffer: VecDeque<Option<ContextLine>>,
+//    /// underlying iterator
+//    iter: Map<Iterator<Item = NumberedLine>, FnOnce(NumberedLine) -> ContextLine>,
+//}
+//
+//impl SmartContextBuffer {
+//    fn new<'a>(context_lines: usize, filter_string: String,
+//           iter: &'a mut Iterator<Item = &'a NumberedLine>) -> SmartContextBuffer{
+//
+//        let filter_string_copy = filter_string.clone();
+//
+//        let mapped_iter = iter.map(move |numbered_line| {
+//            ContextLine::from_numbered_line(numbered_line.to_owned(),
+//                                            &filter_string_copy)
+//        });
+//
+//
+//
+//        SmartContextBuffer {
+//            context_lines: context_lines,
+//            filter_string: filter_string,
+//            buffer: VecDeque::new(),
+//            iter: mapped_iter,
+//        }
+//    }
+//}
+
+
 /// Buffer for providing visibility into past, present, and future lines
 /// produced by an iterator.
 ///
@@ -424,5 +458,34 @@ mod test {
         assert!(e9 == Some(FilteredLine::MatchLine((10, String::from("match")))));
         let e10 = cb.next();
         assert!(e10 == Some(FilteredLine::ContextLine((11, String::from("ctx")))));
+    }
+
+    #[test]
+    fn test2() {
+        let mut lines: Vec<(usize, String)> = vec![
+            (0, "match".to_owned()),
+            (1, "match".to_owned()),
+            (2, "none".to_owned()),
+            (3, "match".to_owned()),
+            (4, "none".to_owned()),
+        ];
+        let context_lines = 0;
+        let filter_string = "match".to_owned();
+        let mut iter = lines.iter();
+
+        let mut cb = ContextBuffer::new(
+            context_lines, filter_string, &mut iter);
+
+        let e0 = cb.next();
+        println!("{:?}", e0);
+        assert!(e0 == Some(FilteredLine::MatchLine((0, String::from("match")))));
+        let e1 = cb.next();
+        assert!(e1 == Some(FilteredLine::MatchLine((1, String::from("match")))));
+        let e2 = cb.next();
+        assert!(e2 == Some(FilteredLine::Gap));
+        let e3 = cb.next();
+        assert!(e3 == Some(FilteredLine::MatchLine((3, String::from("match")))));
+        let e4 = cb.next();
+        assert!(e4 == None);
     }
 }
