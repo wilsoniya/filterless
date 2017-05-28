@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Lines, Result};
 use std::iter::{Iterator, repeat};
+use std::fmt;
 
 //static FNAME: &'static str = "/home/wilsoniya/devel/filterless/test";
 static FNAME: &'static str = "/home/wilsoniya/devel/filterless/pg730.txt";
@@ -33,19 +34,26 @@ pub enum FilteredLine {
 }
 
 #[derive(Clone, Debug)]
+/// Representation of a line returned from a ContextBuffer.
 enum ContextLine {
+    /// the line matched a given filter string
     Match(NumberedLine),
+    /// the line did not match the filter string
     NoMatch(NumberedLine),
-    Gap,
 }
 
+/// Representation of an iterator's encounter with a context gap.
 enum Gap {
+    /// When the current value in the iterator would produce a context gap
     Current,
+    /// When the previous value in the iterator produced a context gap
     Previous,
+    /// When a context gap has not been produced in the past two iterations
     None,
 }
 
 impl ContextLine {
+    /// Creates a `ContextLine` instance by consuming a `NumberedLine`.
     fn from_numbered_line(numbered_line: NumberedLine, filter_string: &String) -> ContextLine {
         if numbered_line.1.contains(filter_string) {
             ContextLine::Match(numbered_line)
@@ -54,6 +62,7 @@ impl ContextLine {
         }
     }
 
+    /// Creates a `FilteredLine` by cloning the inner `NumberedLine`.
     fn to_filtered_line(&self) -> FilteredLine {
         match self {
             &ContextLine::Match(ref numbered_line) => {
@@ -61,9 +70,6 @@ impl ContextLine {
             },
             &ContextLine::NoMatch(ref numbered_line) => {
                 FilteredLine::ContextLine(numbered_line.to_owned())
-            },
-            &ContextLine::Gap => {
-                FilteredLine::Gap
             },
         }
     }
@@ -139,9 +145,10 @@ impl<B: BufRead> Iterator for FilteringLineBuffer<B> {
     fn next(&mut self) -> Option<Self::Item> {
         self.lines.next().map(|line| {
             // TODO: what happens when lines are read as Err()?
-            let line = line.unwrap();
-            let line_copy = line.clone();
             let line_num = self.cached_lines.len() + 1;
+            let line = line.expect(
+                &format!("Can't read line number {}", line_num));
+            let line_copy = line.clone();
             self.cached_lines.push((line_num, line));
             (line_num, line_copy)
         })
@@ -158,8 +165,6 @@ pub struct FilteringLineIter<'a, B: 'a + BufRead> {
     last_line: usize,
     /// `true` when underlying buffer is exhausted
     buffer_exhausted: bool,
-    /// elements buffered
-    context_buffer: VecDeque<Option<NumberedLine>>,
 }
 
 impl<'a, B: BufRead + 'a> FilteringLineIter<'a, B> {
@@ -173,7 +178,6 @@ impl<'a, B: BufRead + 'a> FilteringLineIter<'a, B> {
             filter: filter,
             last_line: last_line,
             buffer_exhausted: false,
-            context_buffer: VecDeque::new(),
         }
     }
 
@@ -235,40 +239,6 @@ impl<'a, B: BufRead + 'a> Iterator for FilteringLineIter<'a, B> {
         }
     }
 }
-
-//struct SmartContextBuffer {
-//    /// number of lines to display before and after matched lines
-//    context_lines: usize,
-//    /// string whose presence in iterator lines indicates a match
-//    filter_string: String,
-//    /// earlier lines in lower indexes
-//    buffer: VecDeque<Option<ContextLine>>,
-//    /// underlying iterator
-//    iter: Map<Iterator<Item = NumberedLine>, FnOnce(NumberedLine) -> ContextLine>,
-//}
-//
-//impl SmartContextBuffer {
-//    fn new<'a>(context_lines: usize, filter_string: String,
-//           iter: &'a mut Iterator<Item = &'a NumberedLine>) -> SmartContextBuffer{
-//
-//        let filter_string_copy = filter_string.clone();
-//
-//        let mapped_iter = iter.map(move |numbered_line| {
-//            ContextLine::from_numbered_line(numbered_line.to_owned(),
-//                                            &filter_string_copy)
-//        });
-//
-//
-//
-//        SmartContextBuffer {
-//            context_lines: context_lines,
-//            filter_string: filter_string,
-//            buffer: VecDeque::new(),
-//            iter: mapped_iter,
-//        }
-//    }
-//}
-
 
 /// Buffer for providing visibility into past, present, and future lines
 /// produced by an iterator.
