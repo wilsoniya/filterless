@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Lines};
 use std::iter::{Iterator, repeat};
+use std::fmt;
 
 //static FNAME: &'static str = "/home/wilsoniya/devel/filterless/test";
 static FNAME: &'static str = "/home/wilsoniya/devel/filterless/pg730.txt";
@@ -85,6 +86,25 @@ impl FilteredLine {
             &FilteredLine::ContextLine((line_num, _)) => Some(line_num),
             &FilteredLine::MatchLine((line_num, _)) => Some(line_num),
             &FilteredLine::UnfilteredLine((line_num, _)) => Some(line_num),
+        }
+    }
+}
+
+impl fmt::Display for FilteredLine {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &FilteredLine::Gap => {
+                write!(f, "-----")
+            },
+            &FilteredLine::ContextLine((line_num, ref line)) => {
+                write!(f, "C {:05}: {}", line_num, line)
+            },
+            &FilteredLine::MatchLine((line_num, ref line)) => {
+                write!(f, "M {:05}: {}", line_num, line)
+            },
+            &FilteredLine::UnfilteredLine((line_num, ref line)) => {
+                write!(f, "U {:05}: {}", line_num, line)
+            },
         }
     }
 }
@@ -350,15 +370,21 @@ impl<T: Iterator<Item = NumberedLine>> Iterator for ContextBuffer<T> {
     }
 }
 
+fn print(lines: &Vec<FilteredLine>) {
+    for line in lines.iter() {
+        println!("{}", line);
+    }
+}
+
 fn main() {
     let file = File::open(FNAME).unwrap();
     let reader = BufReader::new(file);
 
     let mut buffer = LineBuffer::new(reader);
-    let pred = FilterPredicate { filter_string: "OLIVER".to_owned(), context_lines: 0 };
+    let pred = FilterPredicate { filter_string: "OLIVER".to_owned(), context_lines: 3 };
     let iter = buffer.iter(0, Some(pred));
 
-    println!("{:?}", iter.collect::<Vec<FilteredLine>>());
+    print(&iter.collect::<Vec<FilteredLine>>());
 }
 
 #[cfg(test)]
@@ -385,13 +411,13 @@ mod test {
         ];
         let context_lines = 2;
         let filter_string = "match".to_owned();
-        let mut iter = lines.iter();
+        let mut iter = lines.iter().map(|i| i.to_owned());
 
         let pred = FilterPredicate {
             filter_string: filter_string,
             context_lines: context_lines
         };
-        let mut cb = ContextBuffer::new(Some(pred), &mut iter);
+        let mut cb = ContextBuffer::new(Some(pred), iter);
 
         let e0 = cb.next();
         assert!(e0 == Some(FilteredLine::Gap));
@@ -428,7 +454,7 @@ mod test {
         ];
         let context_lines = 0;
         let filter_string = "match".to_owned();
-        let mut iter = lines.iter();
+        let mut iter = lines.iter().map(|i| i.to_owned());
 
         let pred = FilterPredicate {
             filter_string: filter_string,
@@ -456,9 +482,9 @@ mod test {
             (2, "two".to_owned()),
             (3, "three".to_owned()),
         ];
-        let mut iter = lines.iter();
+        let mut iter = lines.iter().map(|i| i.to_owned());
 
-        let mut cb = ContextBuffer::new(None, &mut iter);
+        let mut cb = ContextBuffer::new(None, iter);
 
         let e1 = cb.next();
         println!("{:?}", e1);
