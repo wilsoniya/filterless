@@ -63,13 +63,16 @@ impl ContextLine {
     }
 
     /// Creates a `FilteredLine` by cloning the inner `NumberedLine`.
-    fn to_filtered_line(&self) -> FilteredLine {
+    fn to_filtered_line(&self, pred: &Option<FilterPredicate>) -> FilteredLine {
         match self {
             &ContextLine::Match(ref numbered_line) => {
                 FilteredLine::MatchLine(numbered_line.to_owned())
             },
             &ContextLine::NoMatch(ref numbered_line) => {
-                FilteredLine::ContextLine(numbered_line.to_owned())
+                match pred {
+                    &Some(_) => FilteredLine::ContextLine(numbered_line.to_owned()),
+                    &None => FilteredLine::UnfilteredLine(numbered_line.to_owned()),
+                }
             },
         }
     }
@@ -251,10 +254,7 @@ impl<'a, B: BufRead + 'a> Iterator for FilteringLineIter<'a, B> {
 /// beginning. In this way the "current" line always resides in the exact
 /// middle of the deque.
 struct ContextBuffer<'a, T: Iterator + 'a> {
-    /// number of lines to display before and after matched lines
-    context_lines: usize,
-    /// string whose presence in iterator lines indicates a match
-    filter_string: String,
+    filter_predicate: Option<FilterPredicate>,
     /// earlier lines in lower indexes
     buffer: VecDeque<Option<ContextLine>>,
     /// underlying iterator
@@ -263,22 +263,30 @@ struct ContextBuffer<'a, T: Iterator + 'a> {
 }
 
 impl<'a, T: Iterator<Item = &'a NumberedLine> + 'a> ContextBuffer<'a, T> {
-    fn new(context_lines: usize, filter_string: String,
+    fn new(filter_predicate: Option<FilterPredicate>,
            iter: &'a mut T) -> ContextBuffer<'a, T> {
-        let initial_contents = context_lines + 1;
-        let capacity = context_lines * 2 + 1;
-        let buffer = repeat(None)
-            .take(context_lines + 1)
-            .chain(iter.map(|numbered_line| {
-                Some(ContextLine::from_numbered_line(numbered_line.to_owned(), &filter_string))
-            }))
-            .chain(repeat(None))
-            .take(capacity)
-            .collect();
+
+
+        let buffer = match filter_predicate {
+            Some(FilterPredicate{ ref filter_string, ref context_lines }) => {
+                let capacity = context_lines * 2 + 1;
+                repeat(None)
+                    .take(context_lines + 1)
+                    .chain(iter.map(|numbered_line| {
+                        Some(ContextLine::from_numbered_line(
+                                numbered_line.to_owned(), &filter_string))
+                    }))
+                    .chain(repeat(None))
+                    .take(capacity)
+                    .collect()
+            },
+            None => {
+                VecDeque::with_capacity(1)
+            },
+        };
 
         ContextBuffer {
-            context_lines: context_lines,
-            filter_string: filter_string,
+            filter_predicate: filter_predicate,
             buffer: buffer,
             iter: iter,
             gap: Gap::None,
@@ -297,47 +305,71 @@ impl<'a, T: Iterator<Item = &'a NumberedLine> + 'a> ContextBuffer<'a, T> {
     }
 
     fn fill_buffer(&mut self) {
-        let filter_string = self.filter_string.clone();
-        let item = self.iter.next().map(|numbered_line| {
-            ContextLine::from_numbered_line(numbered_line.to_owned(),
-                                            &filter_string)
-        });
-        self.buffer.pop_front();
-        self.buffer.push_back(item);
-
-        while !self.buffer_has_matches() {
-            if let Some(numbered_line) = self.iter.next() {
-                let context_line = ContextLine::from_numbered_line(
-                    numbered_line.to_owned(), &filter_string);
-
-                if let ContextLine::Match(_) = context_line {
-                    self.gap = Gap::Current;
-                };
-
+        match self.filter_predicate {
+            Some(FilterPredicate{ ref filter_string, ref context_lines }) => {
+                let item = self.iter.next().map(|numbered_line| {
+                    ContextLine::from_numbered_line(numbered_line.to_owned(),
+                    &filter_string)
+                });
                 self.buffer.pop_front();
-                self.buffer.push_back(Some(context_line));
-            } else {
-                self.buffer.clear();
-                break;
+                self.buffer.push_back(item);
+
+                while !self.buffer_has_matches() {
+                    if let Some(numbered_line) = self.iter.next() {
+                        let context_line = ContextLine::from_numbered_line(
+                            numbered_line.to_owned(), &filter_string);
+
+                        if let ContextLine::Match(_) = context_line {
+                            self.gap = Gap::Current;
+                        };
+
+                        self.buffer.pop_front();
+                        self.buffer.push_back(Some(context_line));
+                    } else {
+                        self.buffer.clear();
+                        break;
+                    }
+                }
+            },
+            None => {
+                self.buffer.pop_front();
+                if let Some(numbered_line) = self.iter.next() {
+                    let context_line = ContextLine::NoMatch(
+                        numbered_line.to_owned());
+                    self.buffer.push_back(Some(context_line));
+                }
             }
         }
     }
 
     fn classify_cur_line(&self) -> Option<FilteredLine> {
-        let matches = self.buffer.iter().map(|maybe_line| {
-            match maybe_line {
-                &Some(ContextLine::Match(_)) => true,
-                _ => false,
-            }
-        }).collect::<Vec<bool>>();
+        match self.filter_predicate {
+            Some(FilterPredicate{ ref filter_string, ref context_lines }) => {
+                let matches = self.buffer.iter().map(|maybe_line| {
+                    match maybe_line {
+                        &Some(ContextLine::Match(_)) => true,
+                        _ => false,
+                    }
+                }).collect::<Vec<bool>>();
 
-        let cur_idx = self.context_lines;
-        self.buffer.get(cur_idx)
-            .and_then(|maybe_context_line| {
-                maybe_context_line.as_ref().map(|context_line| {
-                    context_line.to_filtered_line()
-                })
-            })
+                let cur_idx = context_lines;
+                self.buffer.get(*cur_idx)
+                    .and_then(|maybe_context_line| {
+                        maybe_context_line.as_ref().map(|context_line| {
+                            context_line.to_filtered_line(&self.filter_predicate)
+                        })
+                    })
+            },
+            None => {
+                let cur_idx = 0;
+                self.buffer.get(cur_idx)
+                    .and_then(|maybe_context_line| {
+                        maybe_context_line.as_ref().map(|context_line| {
+                            context_line.to_filtered_line(&self.filter_predicate)
+                        })
+                    })
+            },
+        }
     }
 }
 
@@ -382,6 +414,7 @@ fn main() {
 mod test {
     use ::ContextBuffer;
     use ::FilteredLine;
+    use ::FilterPredicate;
 
     #[test]
     fn test1() {
@@ -403,8 +436,11 @@ mod test {
         let filter_string = "match".to_owned();
         let mut iter = lines.iter();
 
-        let mut cb = ContextBuffer::new(
-            context_lines, filter_string, &mut iter);
+        let pred = FilterPredicate {
+            filter_string: filter_string,
+            context_lines: context_lines
+        };
+        let mut cb = ContextBuffer::new(Some(pred), &mut iter);
 
         let e0 = cb.next();
         assert!(e0 == Some(FilteredLine::Gap));
@@ -443,8 +479,11 @@ mod test {
         let filter_string = "match".to_owned();
         let mut iter = lines.iter();
 
-        let mut cb = ContextBuffer::new(
-            context_lines, filter_string, &mut iter);
+        let pred = FilterPredicate {
+            filter_string: filter_string,
+            context_lines: context_lines
+        };
+        let mut cb = ContextBuffer::new(Some(pred), &mut iter);
 
         let e0 = cb.next();
         println!("{:?}", e0);
@@ -457,5 +496,29 @@ mod test {
         assert!(e3 == Some(FilteredLine::MatchLine((3, String::from("match")))));
         let e4 = cb.next();
         assert!(e4 == None);
+    }
+
+    #[test]
+    fn test3() {
+        let mut lines: Vec<(usize, String)> = vec![
+            (1, "one".to_owned()),
+            (2, "two".to_owned()),
+            (3, "three".to_owned()),
+        ];
+        let mut iter = lines.iter();
+
+        let mut cb = ContextBuffer::new(None, &mut iter);
+
+        let e1 = cb.next();
+        println!("{:?}", e1);
+        assert!(e1 == Some(FilteredLine::UnfilteredLine((1, String::from("one")))));
+        let e2 = cb.next();
+        assert!(e2 == Some(FilteredLine::UnfilteredLine((2, String::from("two")))));
+        let e3 = cb.next();
+        assert!(e3 == Some(FilteredLine::UnfilteredLine((3, String::from("three")))));
+        let e4 = cb.next();
+        assert!(e4 == None);
+        let e5 = cb.next();
+        assert!(e5 == None);
     }
 }
