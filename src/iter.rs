@@ -79,17 +79,6 @@ impl ContextLine {
 
 }
 
-impl FilteredLine {
-    pub fn get_line_num(&self) -> Option<usize> {
-        match self {
-            &FilteredLine::Gap => None,
-            &FilteredLine::ContextLine((line_num, _)) => Some(line_num),
-            &FilteredLine::MatchLine((line_num, _)) => Some(line_num),
-            &FilteredLine::UnfilteredLine((line_num, _)) => Some(line_num),
-        }
-    }
-}
-
 impl fmt::Display for FilteredLine {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {

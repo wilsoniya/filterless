@@ -7,6 +7,7 @@ extern crate ncurses;
 extern crate libc;
 
 pub mod buffered_filter;
+pub mod iter;
 pub mod pager;
 
 use std::char;
