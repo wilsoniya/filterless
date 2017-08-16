@@ -6,9 +6,12 @@ extern crate clap;
 extern crate ncurses;
 extern crate libc;
 
-pub mod buffered_filter;
-pub mod iter;
-pub mod pager;
+mod buffered_filter;
+mod iter;
+mod pager;
+mod window_buffer;
+mod buffer;
+mod context_filter;
 
 use std::char;
 use std::ffi::CString;

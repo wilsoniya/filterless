@@ -120,8 +120,9 @@ impl<B: BufRead> LineBuffer<B> {
     /// * `offset`: number of lines from the beginning of the raw lines to
     ///   start considering lines to filter
     /// * `filter`: parameters on which to base resultant iterator's behavior
-    pub fn iter(&mut self, offset: usize, filter:
-                Option<FilterPredicate>) -> ContextBuffer<OffsetIter<B>> {
+    pub fn iter<'a>(&'a mut self, offset: usize,
+                filter: Option<FilterPredicate>
+                ) -> ContextBuffer<OffsetIter<'a, B>> {
         let iter = OffsetIter::new(self, offset);
         ContextBuffer::new(filter, iter)
     }
@@ -260,6 +261,7 @@ impl<T: Iterator<Item = NumberedLine>> ContextBuffer<T> {
         }
     }
 
+    /// Returns `True` if any lines in `buffer` match the filter.
     fn buffer_has_matches(&self) -> bool {
         self.buffer.iter()
             .map(|maybe_elt| {
@@ -378,9 +380,9 @@ fn main() {
 
 #[cfg(test)]
 mod test {
-    use ::ContextBuffer;
-    use ::FilteredLine;
-    use ::FilterPredicate;
+    use iter::ContextBuffer;
+    use iter::FilteredLine;
+    use iter::FilterPredicate;
 
     #[test]
     fn test1() {
