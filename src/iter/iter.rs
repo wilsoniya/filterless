@@ -35,7 +35,7 @@ pub enum FilteredLine {
 
 #[derive(Clone, Debug)]
 /// Representation of a line returned from a ContextBuffer.
-enum ContextLine {
+pub enum ContextLine {
     /// the line matched a given filter string
     Match(NumberedLine),
     /// the line did not match the filter string
@@ -43,7 +43,7 @@ enum ContextLine {
 }
 
 /// Representation of an iterator's encounter with a context gap.
-enum Gap {
+pub enum Gap {
     /// When the current value in the iterator would produce a context gap
     Current,
     /// When the previous value in the iterator produced a context gap
@@ -54,7 +54,7 @@ enum Gap {
 
 impl ContextLine {
     /// Creates a `ContextLine` instance by consuming a `NumberedLine`.
-    fn from_numbered_line(numbered_line: NumberedLine, filter_string: &String) -> ContextLine {
+    pub fn from_numbered_line(numbered_line: NumberedLine, filter_string: &String) -> ContextLine {
         if numbered_line.1.contains(filter_string) {
             ContextLine::Match(numbered_line)
         } else {
@@ -63,7 +63,7 @@ impl ContextLine {
     }
 
     /// Creates a `FilteredLine` by cloning the inner `NumberedLine`.
-    fn to_filtered_line(&self, pred: &Option<FilterPredicate>) -> FilteredLine {
+    pub fn to_filtered_line(&self, pred: &Option<FilterPredicate>) -> FilteredLine {
         match self {
             &ContextLine::Match(ref numbered_line) => {
                 FilteredLine::MatchLine(numbered_line.to_owned())
@@ -380,9 +380,9 @@ fn main() {
 
 #[cfg(test)]
 mod test {
-    use iter::ContextBuffer;
-    use iter::FilteredLine;
-    use iter::FilterPredicate;
+    use super::ContextBuffer;
+    use super::FilteredLine;
+    use super::FilterPredicate;
 
     #[test]
     fn test1() {

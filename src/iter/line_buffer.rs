@@ -1,6 +1,7 @@
 use std::io::{BufRead, BufReader, Lines};
-use iter::NumberedLine;
+use super::iter::NumberedLine;
 
+#[derive(Clone)]
 enum IterDirection {
     BACKWARD,
     FORWARD,
@@ -57,9 +58,19 @@ impl<I: Iterator<Item=String>> LineBuffer<I> {
         self.cached_lines.get(cache_idx).map(|i| i.to_owned())
     }
 
-    pub fn seek(&mut self, line_num: usize, direction: IterDirection) {
-        self.last_iter_line = if line_num > 1 { line_num - 1 } else { 1 };
-        self.iter_direction = direction;
+    pub fn seek(&mut self, maybe_line_num: Option<usize>,
+                maybe_direction: Option<IterDirection>) {
+        if let Some(direction) = maybe_direction {
+            self.iter_direction = direction;
+        }
+
+
+        if let Some(line_num) = maybe_line_num {
+            self.last_iter_line = match self.iter_direction {
+                IterDirection::BACKWARD => line_num + 1,
+                IterDirection::FORWARD => if line_num > 0 { line_num - 1 } else { 0 }
+            };
+        }
     }
 }
 
@@ -67,27 +78,34 @@ impl<I: Iterator<Item=String>> Iterator for LineBuffer<I> {
     type Item = NumberedLine;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let next_line = match self.iter_direction {
-            IterDirection::FORWARD => self.last_iter_line + 1,
+        let maybe_next_line = match self.iter_direction {
+            IterDirection::FORWARD => Some(self.last_iter_line + 1),
             IterDirection::BACKWARD => {
-                if self.last_iter_line > 1 { self.last_iter_line - 1 } else { 1 }
+                if self.last_iter_line > 1 {
+                    Some(self.last_iter_line - 1)
+                } else {
+                    // case: last iter line was already at beginning of buffer
+                    None
+                }
             }
         };
 
-        self.get(next_line)
-            .map(|line| {
-                self.last_iter_line = next_line;
-                line
-            })
+        maybe_next_line.and_then(|next_line| {
+            self.get(next_line)
+                .map(|line| {
+                    self.last_iter_line = next_line;
+                    line
+                })
+        })
     }
 }
 
 mod test {
-    use super::LineBuffer;
+    use super::{IterDirection, LineBuffer};
     use std;
 
     #[test]
-    fn test() {
+    fn test_iteration() {
         let vec: Vec<String> = vec!(
             "one".to_owned(),
             "two".to_owned(),
@@ -95,7 +113,6 @@ mod test {
             "four".to_owned(),
         );
 
-//      let iter: std::slice::Iter<String> = vec.iter();
         let iter = vec.iter().cloned();
         let mut line_buf = LineBuffer::new(iter);
 
@@ -119,5 +136,56 @@ mod test {
         let actual = line_buf.next();
         assert_eq!(expected, actual);
 
+    }
+
+    #[test]
+    fn test_seek() {
+        let vec: Vec<String> = vec!(
+            "one".to_owned(),
+            "two".to_owned(),
+            "three".to_owned(),
+            "four".to_owned(),
+        );
+
+        let iter = vec.iter().cloned();
+        let mut line_buf = LineBuffer::new(iter);
+
+        let expected = Some((1, "one".to_owned()));
+        let actual = line_buf.next();
+        assert_eq!(expected, actual);
+
+        line_buf.seek(Some(1), Some(IterDirection::FORWARD));
+
+        let expected = Some((1, "one".to_owned()));
+        let actual = line_buf.next();
+        assert_eq!(expected, actual);
+
+        line_buf.seek(Some(4), Some(IterDirection::BACKWARD));
+
+        let expected = Some((4, "four".to_owned()));
+        let actual = line_buf.next();
+        assert_eq!(expected, actual);
+
+        let expected = Some((3, "three".to_owned()));
+        let actual = line_buf.next();
+        assert_eq!(expected, actual);
+
+        let expected = Some((2, "two".to_owned()));
+        let actual = line_buf.next();
+        assert_eq!(expected, actual);
+
+        let expected = Some((1, "one".to_owned()));
+        let actual = line_buf.next();
+        assert_eq!(expected, actual);
+
+        let expected = None;
+        let actual = line_buf.next();
+        assert_eq!(expected, actual);
+
+        line_buf.seek(Some(1), Some(IterDirection::FORWARD));
+
+        let expected = Some((1, "one".to_owned()));
+        let actual = line_buf.next();
+        assert_eq!(expected, actual);
     }
 }

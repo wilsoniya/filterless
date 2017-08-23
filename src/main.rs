@@ -9,9 +9,6 @@ extern crate libc;
 mod buffered_filter;
 mod iter;
 mod pager;
-mod window_buffer;
-mod buffer;
-mod context_filter;
 
 use std::char;
 use std::ffi::CString;
