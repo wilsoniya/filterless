@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 use std::iter::{Iterator, repeat};
 
+use super::line_buffer::LineBuffer;
 use super::iter::{ContextLine, FilteredLine, FilterPredicate, Gap, NumberedLine};
 
 /// Buffer for providing visibility into past, present, and future lines
@@ -13,18 +14,18 @@ use super::iter::{ContextLine, FilteredLine, FilterPredicate, Gap, NumberedLine}
 /// lines are pushed to the back of the deque and old lines are popped from the
 /// beginning. In this way the "current" line always resides in the exact
 /// middle of the deque.
-pub struct ContextBuffer<T: Iterator> {
+pub struct ContextBuffer<T: Iterator<Item=String>> {
     filter_predicate: Option<FilterPredicate>,
     /// earlier lines in lower indexes
     buffer: VecDeque<Option<ContextLine>>,
     /// underlying iterator
-    iter: T,
+    iter: LineBuffer<T>,
     gap: Gap
 }
 
-impl<T: Iterator<Item = NumberedLine>> ContextBuffer<T> {
+impl<T: Iterator<Item=String>> ContextBuffer<T> {
     fn new(filter_predicate: Option<FilterPredicate>,
-           mut iter: T) -> ContextBuffer<T> {
+           mut iter: LineBuffer<T>) -> ContextBuffer<T> {
 
         let buffer = match filter_predicate {
             Some(FilterPredicate{ ref filter_string, ref context_lines }) => {
@@ -126,7 +127,7 @@ impl<T: Iterator<Item = NumberedLine>> ContextBuffer<T> {
     }
 }
 
-impl<T: Iterator<Item = NumberedLine>> Iterator for ContextBuffer<T> {
+impl<T: Iterator<Item = String>> Iterator for ContextBuffer<T> {
     type Item = FilteredLine;
 
     fn next(&mut self) -> Option<Self::Item> {

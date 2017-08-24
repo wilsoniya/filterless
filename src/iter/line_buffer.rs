@@ -1,4 +1,3 @@
-use std::io::{BufRead, BufReader, Lines};
 use super::iter::NumberedLine;
 
 #[derive(Clone)]
@@ -102,7 +101,6 @@ impl<I: Iterator<Item=String>> Iterator for LineBuffer<I> {
 
 mod test {
     use super::{IterDirection, LineBuffer};
-    use std;
 
     #[test]
     fn test_iteration() {
