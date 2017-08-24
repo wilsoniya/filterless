@@ -153,3 +153,119 @@ impl<T: Iterator<Item = String>> Iterator for ContextBuffer<T> {
     }
 }
 
+#[cfg(test)]
+mod test {
+    use super::ContextBuffer;
+    use iter::iter::FilteredLine;
+    use iter::iter::FilterPredicate;
+    use iter::line_buffer::LineBuffer;
+
+    #[test]
+    fn test1() {
+        let mut lines: Vec<String> = vec![
+            "none".to_owned(),
+            "ctx".to_owned(),
+            "ctx".to_owned(),
+            "match".to_owned(),
+            "ctx".to_owned(),
+            "ctx".to_owned(),
+            "none".to_owned(),
+            "none".to_owned(),
+            "ctx".to_owned(),
+            "ctx".to_owned(),
+            "match".to_owned(),
+            "ctx".to_owned(),
+        ];
+        let context_lines = 2;
+        let filter_string = "match".to_owned();
+        let iter = lines.iter().map(|i| i.to_owned());
+        let mut line_buf = LineBuffer::new(iter);
+
+        let pred = FilterPredicate {
+            filter_string: filter_string,
+            context_lines: context_lines
+        };
+        let mut cb = ContextBuffer::new(Some(pred), line_buf);
+
+        let e0 = cb.next();
+        assert!(e0 == Some(FilteredLine::Gap));
+        let e1 = cb.next();
+        assert!(e1 == Some(FilteredLine::ContextLine((2, String::from("ctx")))));
+        let e2 = cb.next();
+        assert!(e2 == Some(FilteredLine::ContextLine((3, String::from("ctx")))));
+        let e3 = cb.next();
+        assert!(e3 == Some(FilteredLine::MatchLine((4, String::from("match")))));
+        let e4 = cb.next();
+        assert!(e4 == Some(FilteredLine::ContextLine((5, String::from("ctx")))));
+        let e5 = cb.next();
+        assert!(e5 == Some(FilteredLine::ContextLine((6, String::from("ctx")))));
+        let e6 = cb.next();
+        assert!(e6 == Some(FilteredLine::Gap));
+        let e7 = cb.next();
+        assert!(e7 == Some(FilteredLine::ContextLine((9, String::from("ctx")))));
+        let e8 = cb.next();
+        assert!(e8 == Some(FilteredLine::ContextLine((10, String::from("ctx")))));
+        let e9 = cb.next();
+        assert!(e9 == Some(FilteredLine::MatchLine((11, String::from("match")))));
+        let e10 = cb.next();
+        assert!(e10 == Some(FilteredLine::ContextLine((12, String::from("ctx")))));
+    }
+
+    #[test]
+    fn test2() {
+        let mut lines: Vec<String> = vec![
+            "match".to_owned(),
+            "match".to_owned(),
+            "none".to_owned(),
+            "match".to_owned(),
+            "none".to_owned(),
+        ];
+        let context_lines = 0;
+        let filter_string = "match".to_owned();
+        let iter = lines.iter().map(|i| i.to_owned());
+        let mut line_buf = LineBuffer::new(iter);
+
+        let pred = FilterPredicate {
+            filter_string: filter_string,
+            context_lines: context_lines
+        };
+        let mut cb = ContextBuffer::new(Some(pred), line_buf);
+
+        let e0 = cb.next();
+        println!("{:?}", e0);
+        assert!(e0 == Some(FilteredLine::MatchLine((1, String::from("match")))));
+        let e1 = cb.next();
+        assert!(e1 == Some(FilteredLine::MatchLine((2, String::from("match")))));
+        let e2 = cb.next();
+        assert!(e2 == Some(FilteredLine::Gap));
+        let e3 = cb.next();
+        assert!(e3 == Some(FilteredLine::MatchLine((4, String::from("match")))));
+        let e4 = cb.next();
+        assert!(e4 == None);
+    }
+
+    #[test]
+    fn test3() {
+        let mut lines: Vec<String> = vec![
+            "one".to_owned(),
+            "two".to_owned(),
+            "three".to_owned(),
+        ];
+        let iter = lines.iter().map(|i| i.to_owned());
+        let mut line_buf = LineBuffer::new(iter);
+
+        let mut cb = ContextBuffer::new(None, line_buf);
+
+        let e1 = cb.next();
+        println!("{:?}", e1);
+        assert!(e1 == Some(FilteredLine::UnfilteredLine((1, String::from("one")))));
+        let e2 = cb.next();
+        assert!(e2 == Some(FilteredLine::UnfilteredLine((2, String::from("two")))));
+        let e3 = cb.next();
+        assert!(e3 == Some(FilteredLine::UnfilteredLine((3, String::from("three")))));
+        let e4 = cb.next();
+        assert!(e4 == None);
+        let e5 = cb.next();
+        assert!(e5 == None);
+    }
+}
