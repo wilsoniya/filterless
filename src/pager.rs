@@ -137,9 +137,9 @@ impl<B:BufRead> Pager<B> {
 
             if self.context > 0 && disp_num > 0 && line.0 > last_idx + 1 {
                 // case: context lines > 0  and line gap detected; show separator
-                ncurses::wattron(self.window, ncurses::COLOR_PAIR(3) as i32);
+                ncurses::wattron(self.window, ncurses::COLOR_PAIR(3));
                 ncurses::wprintw(self.window, &format!("{:-<1$}\n", "", 79));
-                ncurses::wattroff(self.window, ncurses::COLOR_PAIR(3) as i32);
+                ncurses::wattroff(self.window, ncurses::COLOR_PAIR(3));
                 printed_lines +=1;
             }
 
@@ -165,10 +165,10 @@ impl<B:BufRead> Pager<B> {
                   filter_string: &Option<String>) {
 
         // unconditionally print line number
-        ncurses::wattron(self.window, ncurses::COLOR_PAIR(2) as i32);
+        ncurses::wattron(self.window, ncurses::COLOR_PAIR(2));
         ncurses::wprintw(self.window,
                          &format!("{:>1$} ", line.0 + 1, self.num_digits));
-        ncurses::wattroff(self.window, ncurses::COLOR_PAIR(2) as i32);
+        ncurses::wattroff(self.window, ncurses::COLOR_PAIR(2));
 
         match filter_string {
             &Some(ref filter_string) => {
@@ -177,9 +177,9 @@ impl<B:BufRead> Pager<B> {
                 for (i, frag) in frags.iter().enumerate() {
                     ncurses::wprintw(self.window, frag);
                     if i < frags.len() - 1 {
-                        ncurses::wattron(self.window, ncurses::COLOR_PAIR(1) as i32);
+                        ncurses::wattron(self.window, ncurses::COLOR_PAIR(1));
                         ncurses::wprintw(self.window, filter_string);
-                        ncurses::wattroff(self.window, ncurses::COLOR_PAIR(1) as i32);
+                        ncurses::wattroff(self.window, ncurses::COLOR_PAIR(1));
                     }
                 }
             },

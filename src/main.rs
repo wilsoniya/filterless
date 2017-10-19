@@ -138,7 +138,7 @@ fn main() {
 
     let mut max_x = 0;
     let mut max_y = 0;
-    getmaxyx(stdscr, &mut max_y, &mut max_x);
+    getmaxyx(stdscr(), &mut max_y, &mut max_x);
     let height = max_y - MARGIN;
     let width = max_x - MARGIN;
 
