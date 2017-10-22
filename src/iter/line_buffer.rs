@@ -1,7 +1,7 @@
 use super::iter::NumberedLine;
 
 #[derive(Clone)]
-enum IterDirection {
+pub enum IterDirection {
     BACKWARD,
     FORWARD,
 }
@@ -57,6 +57,12 @@ impl<I: Iterator<Item=String>> LineBuffer<I> {
         self.cached_lines.get(cache_idx).map(|i| i.to_owned())
     }
 
+    /// Sets the position and direction of the iterator.
+    ///
+    /// ### Parameters
+    /// * `maybe_line_num`: the 1-based index of the next line to show from the
+    ///   underlying itereator
+    /// * `maybe_direction`: direction for the iterator to proceed
     pub fn seek(&mut self, maybe_line_num: Option<usize>,
                 maybe_direction: Option<IterDirection>) {
         if let Some(direction) = maybe_direction {

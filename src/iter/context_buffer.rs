@@ -24,7 +24,7 @@ pub struct ContextBuffer<T: Iterator<Item=String>> {
 }
 
 impl<T: Iterator<Item=String>> ContextBuffer<T> {
-    fn new(filter_predicate: Option<FilterPredicate>,
+    pub fn new(filter_predicate: Option<FilterPredicate>,
            mut iter: LineBuffer<T>) -> ContextBuffer<T> {
 
         let buffer = match filter_predicate {
@@ -124,6 +124,11 @@ impl<T: Iterator<Item=String>> ContextBuffer<T> {
                     })
             },
         }
+    }
+
+    /// Consumes this `ContextBuffer`, returning the inner `LineBuffer`.
+    pub fn into_line_buffer(self) -> LineBuffer<T> {
+        self.iter
     }
 }
 
@@ -267,5 +272,27 @@ mod test {
         assert!(e4 == None);
         let e5 = cb.next();
         assert!(e5 == None);
+    }
+
+    #[test]
+    fn test_multiple_context_buffers() {
+        let mut lines: Vec<String> = vec![
+            "one".to_owned(),
+            "two".to_owned(),
+            "three".to_owned(),
+        ];
+        let iter = lines.iter().map(|i| i.to_owned());
+        let mut line_buf = LineBuffer::new(iter);
+
+        // this would fail to compile:
+        //let mut cb = ContextBuffer::new(None, line_buf);
+        //let mut cb2 = ContextBuffer::new(None, line_buf);
+
+        // but this does compile
+        let mb = line_buf;
+        let cb = ContextBuffer::new(None, mb);
+
+        let mb2 = cb.into_line_buffer();
+        let cb = ContextBuffer::new(None, mb2);
     }
 }
