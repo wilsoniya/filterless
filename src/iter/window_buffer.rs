@@ -46,6 +46,7 @@ impl<T: Iterator<Item=String>> WindowBuffer<T> {
         line_buffer.seek(Some(1), None);
         self.context_buffer = Some(ContextBuffer::new(predicate.clone(), line_buffer));
         self.predicate = predicate;
+        self.buffered_lines.clear();
 
         // XXX it's probably not desireable to reset the line number to zero
         // when the filter predicate is changed
@@ -146,7 +147,7 @@ impl<T: Iterator<Item=String>> WindowBuffer<T> {
 
 mod test {
     use super::{WindowBuffer};
-    use iter::iter::{NumberedLine, FilteredLine};
+    use iter::iter::{NumberedLine, FilteredLine, FilterPredicate};
 
     #[test]
     fn test_prev_next() {
@@ -281,5 +282,54 @@ mod test {
                    FilteredLine::UnfilteredLine((2, "two".to_owned())),
                    FilteredLine::UnfilteredLine((3, "three".to_owned())),
         ]);
+    }
+
+    #[test]
+    fn test_predicate() {
+        let vec: Vec<String> = vec!(
+            "one".to_owned(),
+            "two".to_owned(),
+            "three".to_owned(),
+            "four".to_owned(),
+            "five".to_owned(),
+            "six".to_owned(),
+            "seven".to_owned(),
+            "eight".to_owned(),
+            "nine".to_owned(),
+            "ten".to_owned(),
+        );
+        let iter = vec.iter().map(|i| i.to_owned());
+
+        let mut predicate = Some(FilterPredicate{
+            filter_string: "t".to_owned(),
+            context_lines: 0,
+        });
+        let mut obj_ut = WindowBuffer::new(iter, predicate, 80, 3);
+
+        assert_eq!(obj_ut.next_line(), Some(FilteredLine::Gap));
+        assert_eq!(obj_ut.next_line(), Some(FilteredLine::MatchLine((2, "two".to_owned()))));
+        assert_eq!(obj_ut.next_line(), Some(FilteredLine::MatchLine((3, "three".to_owned()))));
+        assert_eq!(obj_ut.next_line(), Some(FilteredLine::Gap));
+        assert_eq!(obj_ut.next_line(), Some(FilteredLine::MatchLine((8, "eight".to_owned()))));
+        assert_eq!(obj_ut.next_line(), Some(FilteredLine::Gap));
+        assert_eq!(obj_ut.next_line(), Some(FilteredLine::MatchLine((10, "ten".to_owned()))));
+        assert_eq!(obj_ut.next_line(), None);
+
+        predicate = Some(FilterPredicate{
+            filter_string: "t".to_owned(),
+            context_lines: 1,
+        });
+        obj_ut.set_predicate(predicate);
+
+        assert_eq!(obj_ut.next_line(), Some(FilteredLine::ContextLine((1, "one".to_owned()))));
+        assert_eq!(obj_ut.next_line(), Some(FilteredLine::MatchLine((2, "two".to_owned()))));
+        assert_eq!(obj_ut.next_line(), Some(FilteredLine::MatchLine((3, "three".to_owned()))));
+        assert_eq!(obj_ut.next_line(), Some(FilteredLine::ContextLine((4, "four".to_owned()))));
+        assert_eq!(obj_ut.next_line(), Some(FilteredLine::Gap));
+        assert_eq!(obj_ut.next_line(), Some(FilteredLine::ContextLine((7, "seven".to_owned()))));
+        assert_eq!(obj_ut.next_line(), Some(FilteredLine::MatchLine((8, "eight".to_owned()))));
+        assert_eq!(obj_ut.next_line(), Some(FilteredLine::ContextLine((9, "nine".to_owned()))));
+        assert_eq!(obj_ut.next_line(), Some(FilteredLine::MatchLine((10, "ten".to_owned()))));
+        assert_eq!(obj_ut.next_line(), None);
     }
 }
