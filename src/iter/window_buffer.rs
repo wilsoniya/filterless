@@ -4,7 +4,7 @@ use super::line_buffer::LineBuffer;
 use super::context_buffer::ContextBuffer;
 use super::iter;
 
-struct WindowBuffer<T: Iterator<Item=String>> {
+pub struct WindowBuffer<T: Iterator<Item=String>> {
     context_buffer: Option<ContextBuffer<T>>,
     buffered_lines: Vec<iter::FilteredLine>,
     predicate: Option<iter::FilterPredicate>,
