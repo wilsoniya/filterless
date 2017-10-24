@@ -79,7 +79,6 @@ impl<T: Iterator<Item=String>> WindowBuffer<T> {
     pub fn next_page(&mut self) -> Vec<iter::FilteredLine> {
         let first_line = self.cur_line + 1;
         let num_lines = self.height;
-        println!("next_page(): first_line: {}; num_lines: {}", first_line, num_lines);
         let lines = self.get_lines(first_line, num_lines);
 
         self.cur_line = if lines.len() > 0 {
@@ -99,7 +98,6 @@ impl<T: Iterator<Item=String>> WindowBuffer<T> {
             (1, num_lines)
         };
 
-        println!("prev_page(): first_line: {}; num_lines: {}", first_line, num_lines);
         let lines = self.get_lines(first_line, num_lines);
 
         self.cur_line = if lines.len() > 0 { first_line } else { 0 };

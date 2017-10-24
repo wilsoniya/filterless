@@ -145,9 +145,9 @@ fn main() {
     refresh();
 
     let win = newwin(height, width, MARGIN / 2, MARGIN / 2);
-    let mut pager = Pager::new(win);
-    pager.load(lines);
-    pager.offset_page(0);
+    let iter = lines.map(|l| l.expect("Unicode error encountered on line"));
+    let mut pager = Pager::new(win, iter);
+    pager.next_page();
 
     loop {
         match getch() {

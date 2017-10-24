@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::io::BufRead;
 use std::io::Lines;
 
-use iter::{FilterPredicate, WindowBuffer};
+use iter::{ContextLine, FilteredLine, FilterPredicate, WindowBuffer};
 
 use ncurses;
 
@@ -18,7 +18,7 @@ pub struct Pager<T: Iterator<Item=String>> {
 }
 
 impl<T: Iterator<Item=String>> Pager<T> {
-    pub fn new<B: BufRead>(window: ncurses::WINDOW, lines: Lines<B>) -> Pager<T> {
+    pub fn new(window: ncurses::WINDOW, iter: T) -> Pager<T> {
         ncurses::start_color();
         ncurses::init_pair(1, ncurses::constants::COLOR_BLACK,
                            ncurses::constants::COLOR_YELLOW);
@@ -30,11 +30,13 @@ impl<T: Iterator<Item=String>> Pager<T> {
         let mut height = 0;
         let mut width = 0;
         ncurses::getmaxyx(window, &mut height, &mut width);
+        ncurses::wclear(window);
+        ncurses::scrollok(window, true);
+        ncurses::idlok(window, true);
 
-        let iter = lines.map(|l| l.expect("Unicode Error"));
         let predicate = None;
-        let window_buffer: WindowBuffer<T> = WindowBuffer::new(
-            iter, predicate, width as usize, height as usize);
+        let window_buffer = WindowBuffer::new(
+            iter, predicate.clone(), width as usize, height as usize);
 
         Pager {
             window: window,
@@ -46,29 +48,71 @@ impl<T: Iterator<Item=String>> Pager<T> {
         }
     }
 
-    pub fn load<B: BufRead> (&mut self, lines: Lines<B>) {
-//      let iter = lines.map(|l| l.expect("Unicode Error"));
-//      let predicate = None;
-//      let window_buffer = WindowBuffer::new(iter, predicate, self.width, self.height);
-//      self.window_buffer = Some(window_buffer as T);
-    }
-
     pub fn next_line(&mut self) {
-//      self.offset_page(1);
+        let maybe_line = self.window_buffer.as_mut().and_then(|wb| {
+            wb.next_line()
+        });
+
+        if let Some(filtered_line) = maybe_line {
+            ncurses::wscrl(self.window, 1);
+            ncurses::wmove(self.window, self.height as i32 - 1, 0);
+            self.print_line2(&filtered_line);
+            ncurses::wrefresh(self.window);
+        }
     }
 
     pub fn prev_line(&mut self) {
-//      self.offset_page(-1);
+        let maybe_line = self.window_buffer.as_mut().and_then(|wb| {
+            wb.prev_line()
+        });
+
+        if let Some(filtered_line) = maybe_line {
+            ncurses::wscrl(self.window, -1);
+            ncurses::wmove(self.window, 0, 0);
+            self.print_line2(&filtered_line);
+            ncurses::wprintw(self.window, "\n");
+            ncurses::wrefresh(self.window);
+        }
     }
 
     pub fn next_page(&mut self){
-//      let offset = self.height as i64;
-//      self.offset_page(offset);
+        let maybe_lines = self.window_buffer.as_mut().map(|wb| {
+            wb.next_page()
+        });
+
+        if let Some(lines) = maybe_lines {
+            ncurses::wclear(self.window);
+
+            for (i, filtered_line) in lines.iter().enumerate() {
+                self.print_line2(&filtered_line);
+
+                if i < lines.len() - 1 {
+                    ncurses::wprintw(self.window, "\n");
+                }
+            }
+
+            ncurses::wrefresh(self.window);
+        }
     }
 
     pub fn prev_page(&mut self) {
-//      let offset = -1 * self.height as i64;
-//      self.offset_page(offset);
+        let maybe_lines = self.window_buffer.as_mut().map(|wb| {
+            wb.prev_page()
+        });
+
+        if let Some(lines) = maybe_lines {
+            ncurses::wclear(self.window);
+
+            for (i, filtered_line) in lines.iter().enumerate() {
+                self.print_line2(&filtered_line);
+
+                if i < lines.len() - 1 {
+                    ncurses::wprintw(self.window, "\n");
+                }
+            }
+
+            ncurses::wrefresh(self.window);
+        }
     }
 
     pub fn filter(&mut self, target: String) {
@@ -104,8 +148,8 @@ impl<T: Iterator<Item=String>> Pager<T> {
 //        self.print_lines(lines, filter_string);
 //    }
 
-    fn print_lines(&mut self, lines: Vec<buffered_filter::Line>,
-                   filter_string: Option<String>) {
+//    fn print_lines(&mut self, lines: Vec<buffered_filter::Line>,
+//                   filter_string: Option<String>) {
 //        ncurses::wclear(self.window);
 //
 //        let mut line_map: BTreeMap<usize, buffered_filter::Line> = BTreeMap::new();
@@ -169,6 +213,49 @@ impl<T: Iterator<Item=String>> Pager<T> {
 //        }
 //
 //        ncurses::wrefresh(self.window);
+//    }
+
+
+    fn print_line_num(&mut self, line_num: usize) {
+        self.num_digits = (line_num as f32).log10().floor() as usize + 1;
+        ncurses::wattron(self.window, ncurses::COLOR_PAIR(2));
+        ncurses::wprintw(self.window,
+                         &format!("{:>1$} ", line_num, self.num_digits));
+        ncurses::wattroff(self.window, ncurses::COLOR_PAIR(2));
+    }
+
+    fn print_line2(&mut self, filtered_line: &FilteredLine) {
+        match *filtered_line {
+            FilteredLine::Gap => {
+                ncurses::wprintw(self.window, "-----");
+            },
+            FilteredLine::ContextLine((ref line_num, ref line)) => {
+                self.print_line_num(*line_num);
+                ncurses::wprintw(self.window, line);
+
+            },
+            FilteredLine::MatchLine((ref line_num, ref line)) => {
+                let predicate = self.predicate.as_ref().expect(
+                    "Filter predicate was None.").to_owned();
+                self.print_line_num(*line_num);
+
+                let frags: Vec<&str> = line.split(&predicate.filter_string).collect();
+
+                for (i, frag) in frags.iter().enumerate() {
+                    ncurses::wprintw(self.window, frag);
+                    if i < frags.len() - 1 {
+                        ncurses::wattron(self.window, ncurses::COLOR_PAIR(1));
+                        ncurses::wprintw(self.window, &predicate.filter_string);
+                        ncurses::wattroff(self.window, ncurses::COLOR_PAIR(1));
+                    }
+                }
+            },
+            FilteredLine::UnfilteredLine((ref line_num, ref line)) => {
+                self.print_line_num(*line_num);
+                ncurses::wprintw(self.window, line);
+            },
+        }
+
     }
 
     fn print_line(&self, line: &buffered_filter::Line,
