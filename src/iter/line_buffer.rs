@@ -105,6 +105,7 @@ impl<I: Iterator<Item=String>> Iterator for LineBuffer<I> {
     }
 }
 
+#[cfg(test)]
 mod test {
     use super::{IterDirection, LineBuffer};
 

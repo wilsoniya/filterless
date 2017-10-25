@@ -1,12 +1,6 @@
-use std::collections::BTreeMap;
-use std::io::BufRead;
-use std::io::Lines;
-
-use iter::{ContextLine, FilteredLine, FilterPredicate, WindowBuffer};
+use iter::{FilteredLine, FilterPredicate, WindowBuffer};
 
 use ncurses;
-
-use buffered_filter;
 
 pub struct Pager<T: Iterator<Item=String>> {
     window: ncurses::WINDOW,
@@ -56,7 +50,7 @@ impl<T: Iterator<Item=String>> Pager<T> {
         if let Some(filtered_line) = maybe_line {
             ncurses::wscrl(self.window, 1);
             ncurses::wmove(self.window, self.height as i32 - 1, 0);
-            self.print_line2(&filtered_line);
+            self.print_line(&filtered_line);
             ncurses::wrefresh(self.window);
         }
     }
@@ -69,7 +63,7 @@ impl<T: Iterator<Item=String>> Pager<T> {
         if let Some(filtered_line) = maybe_line {
             ncurses::wscrl(self.window, -1);
             ncurses::wmove(self.window, 0, 0);
-            self.print_line2(&filtered_line);
+            self.print_line(&filtered_line);
             ncurses::wprintw(self.window, "\n");
             ncurses::wrefresh(self.window);
         }
@@ -84,7 +78,7 @@ impl<T: Iterator<Item=String>> Pager<T> {
             ncurses::wclear(self.window);
 
             for (i, filtered_line) in lines.iter().enumerate() {
-                self.print_line2(&filtered_line);
+                self.print_line(&filtered_line);
 
                 if i < lines.len() - 1 {
                     ncurses::wprintw(self.window, "\n");
@@ -104,7 +98,7 @@ impl<T: Iterator<Item=String>> Pager<T> {
             ncurses::wclear(self.window);
 
             for (i, filtered_line) in lines.iter().enumerate() {
-                self.print_line2(&filtered_line);
+                self.print_line(&filtered_line);
 
                 if i < lines.len() - 1 {
                     ncurses::wprintw(self.window, "\n");
@@ -138,7 +132,7 @@ impl<T: Iterator<Item=String>> Pager<T> {
         ncurses::wattroff(self.window, ncurses::COLOR_PAIR(2));
     }
 
-    fn print_line2(&mut self, filtered_line: &FilteredLine) {
+    fn print_line(&mut self, filtered_line: &FilteredLine) {
         match *filtered_line {
             FilteredLine::Gap => {
                 ncurses::wprintw(self.window, "-----");
@@ -170,33 +164,5 @@ impl<T: Iterator<Item=String>> Pager<T> {
             },
         }
 
-    }
-
-    fn print_line(&self, line: &buffered_filter::Line,
-                  filter_string: &Option<String>) {
-
-        // unconditionally print line number
-        ncurses::wattron(self.window, ncurses::COLOR_PAIR(2));
-        ncurses::wprintw(self.window,
-                         &format!("{:>1$} ", line.0 + 1, self.num_digits));
-        ncurses::wattroff(self.window, ncurses::COLOR_PAIR(2));
-
-        match filter_string {
-            &Some(ref filter_string) => {
-                let frags: Vec<&str> = line.1.split(filter_string).collect();
-
-                for (i, frag) in frags.iter().enumerate() {
-                    ncurses::wprintw(self.window, frag);
-                    if i < frags.len() - 1 {
-                        ncurses::wattron(self.window, ncurses::COLOR_PAIR(1));
-                        ncurses::wprintw(self.window, filter_string);
-                        ncurses::wattroff(self.window, ncurses::COLOR_PAIR(1));
-                    }
-                }
-            },
-            &None => {
-                ncurses::wprintw(self.window, &line.1);
-            },
-        };
     }
 }

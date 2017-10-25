@@ -6,7 +6,6 @@ extern crate clap;
 extern crate ncurses;
 extern crate libc;
 
-mod buffered_filter;
 mod iter;
 mod pager;
 

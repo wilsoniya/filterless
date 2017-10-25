@@ -1,5 +1,3 @@
-use std::io::BufRead;
-
 use super::line_buffer::LineBuffer;
 use super::context_buffer::ContextBuffer;
 use super::iter;
@@ -31,7 +29,8 @@ impl<T: Iterator<Item=String>> WindowBuffer<T> {
     ///   source
     /// * `width`: width of the terminal window in columns
     /// * `height`: height of the terminal window in rows
-    pub fn new(mut iter: T,
+    pub fn new(
+           iter: T,
            predicate: Option<iter::FilterPredicate>,
            width: usize,
            height: usize) -> Self {
@@ -39,7 +38,7 @@ impl<T: Iterator<Item=String>> WindowBuffer<T> {
         let line_buffer = LineBuffer::new(iter);
         let context_buffer = Some(ContextBuffer::new(predicate.clone(), line_buffer));
 
-        let mut ret = WindowBuffer {
+        let ret = WindowBuffer {
             context_buffer: context_buffer,
             buffered_lines: Vec::new(),
             predicate: predicate,
@@ -57,7 +56,7 @@ impl<T: Iterator<Item=String>> WindowBuffer<T> {
     /// This also has the effect of purging the buffer and setting the current
     /// position to zero.
     pub fn set_predicate(&mut self, predicate: Option<iter::FilterPredicate>) {
-        let mut context_buffer = self.context_buffer
+        let context_buffer = self.context_buffer
             .take()
             .expect("context_buffer must always be Some");
 
@@ -112,7 +111,7 @@ impl<T: Iterator<Item=String>> WindowBuffer<T> {
     /// Gets a page full of lines ending before the line currently displayed
     /// at the top of the window.
     pub fn prev_page(&mut self) -> Vec<iter::FilteredLine> {
-        let start_line = if (self.start_line as i64 - self.height as i64 >= 1) {
+        let start_line = if self.start_line as i64 - self.height as i64 >= 1 {
             self.start_line - self.height
         } else {
             1
@@ -166,9 +165,10 @@ impl<T: Iterator<Item=String>> WindowBuffer<T> {
     }
 }
 
+#[cfg(test)]
 mod test {
     use super::{WindowBuffer};
-    use iter::iter::{NumberedLine, FilteredLine, FilterPredicate};
+    use iter::iter::{FilteredLine, FilterPredicate};
 
     #[test]
     fn test_prev_next() {

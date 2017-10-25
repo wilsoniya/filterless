@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use std::iter::{Iterator, repeat};
 
 use super::line_buffer::LineBuffer;
-use super::iter::{ContextLine, FilteredLine, FilterPredicate, Gap, NumberedLine};
+use super::iter::{ContextLine, FilteredLine, FilterPredicate, Gap};
 
 /// Buffer for providing visibility into past, present, and future lines
 /// produced by an iterator.
@@ -167,7 +167,7 @@ mod test {
 
     #[test]
     fn test1() {
-        let mut lines: Vec<String> = vec![
+        let lines: Vec<String> = vec![
             "none".to_owned(),
             "ctx".to_owned(),
             "ctx".to_owned(),
@@ -184,7 +184,7 @@ mod test {
         let context_lines = 2;
         let filter_string = "match".to_owned();
         let iter = lines.iter().map(|i| i.to_owned());
-        let mut line_buf = LineBuffer::new(iter);
+        let line_buf = LineBuffer::new(iter);
 
         let pred = FilterPredicate {
             filter_string: filter_string,
@@ -218,7 +218,7 @@ mod test {
 
     #[test]
     fn test2() {
-        let mut lines: Vec<String> = vec![
+        let lines: Vec<String> = vec![
             "match".to_owned(),
             "match".to_owned(),
             "none".to_owned(),
@@ -228,7 +228,7 @@ mod test {
         let context_lines = 0;
         let filter_string = "match".to_owned();
         let iter = lines.iter().map(|i| i.to_owned());
-        let mut line_buf = LineBuffer::new(iter);
+        let line_buf = LineBuffer::new(iter);
 
         let pred = FilterPredicate {
             filter_string: filter_string,
@@ -251,13 +251,13 @@ mod test {
 
     #[test]
     fn test3() {
-        let mut lines: Vec<String> = vec![
+        let lines: Vec<String> = vec![
             "one".to_owned(),
             "two".to_owned(),
             "three".to_owned(),
         ];
         let iter = lines.iter().map(|i| i.to_owned());
-        let mut line_buf = LineBuffer::new(iter);
+        let line_buf = LineBuffer::new(iter);
 
         let mut cb = ContextBuffer::new(None, line_buf);
 
@@ -276,13 +276,13 @@ mod test {
 
     #[test]
     fn test_multiple_context_buffers() {
-        let mut lines: Vec<String> = vec![
+        let lines: Vec<String> = vec![
             "one".to_owned(),
             "two".to_owned(),
             "three".to_owned(),
         ];
         let iter = lines.iter().map(|i| i.to_owned());
-        let mut line_buf = LineBuffer::new(iter);
+        let line_buf = LineBuffer::new(iter);
 
         // this would fail to compile:
         //let mut cb = ContextBuffer::new(None, line_buf);
@@ -293,6 +293,6 @@ mod test {
         let cb = ContextBuffer::new(None, mb);
 
         let mb2 = cb.into_line_buffer();
-        let cb = ContextBuffer::new(None, mb2);
+        let _ = ContextBuffer::new(None, mb2);
     }
 }
