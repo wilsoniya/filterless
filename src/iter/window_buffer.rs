@@ -4,9 +4,14 @@ use super::line_buffer::LineBuffer;
 use super::context_buffer::ContextBuffer;
 use super::iter;
 
+/// Thing which filters, describes, and categorizes lines from an iterator
+/// according to some specific filtering criteria.
 pub struct WindowBuffer<T: Iterator<Item=String>> {
+    /// line source and filtering apparatus
     context_buffer: Option<ContextBuffer<T>>,
+    /// cache of lines that have been read off of `context_buffer`
     buffered_lines: Vec<iter::FilteredLine>,
+    /// criteria on which lines are filtered by `context_buffer`
     predicate: Option<iter::FilterPredicate>,
     /// width of window in columns
     width: usize,
@@ -19,6 +24,13 @@ pub struct WindowBuffer<T: Iterator<Item=String>> {
 }
 
 impl<T: Iterator<Item=String>> WindowBuffer<T> {
+    /// Creates a new `WindowBuffer`.
+    ///
+    /// ### Parameters
+    /// * `predicate`: optinal filtering criteria applied to underlying line
+    ///   source
+    /// * `width`: width of the terminal window in columns
+    /// * `height`: height of the terminal window in rows
     pub fn new(mut iter: T,
            predicate: Option<iter::FilterPredicate>,
            width: usize,
@@ -40,6 +52,10 @@ impl<T: Iterator<Item=String>> WindowBuffer<T> {
         ret
     }
 
+    /// Sets the filter predicate.
+    ///
+    /// This also has the effect of purging the buffer and setting the current
+    /// position to zero.
     pub fn set_predicate(&mut self, predicate: Option<iter::FilterPredicate>) {
         let mut context_buffer = self.context_buffer
             .take()
@@ -56,6 +72,8 @@ impl<T: Iterator<Item=String>> WindowBuffer<T> {
         self.end_line = 0;
     }
 
+    /// Gets the next line after the line currently displayed at the bottom of
+    /// the window.
     pub fn next_line(&mut self) -> Option<iter::FilteredLine> {
         let next_line = self.end_line + 1;
 
@@ -65,6 +83,7 @@ impl<T: Iterator<Item=String>> WindowBuffer<T> {
         lines.first().map(|line| line.to_owned())
     }
 
+    /// Gets the line before the line at the top of the window.
     pub fn prev_line(&mut self) -> Option<iter::FilteredLine> {
         if self.end_line as i64 - self.height as i64 <= 0 {
             // case already at the beginning; can't go back farther
@@ -80,6 +99,8 @@ impl<T: Iterator<Item=String>> WindowBuffer<T> {
         lines.first().map(|line| line.to_owned())
     }
 
+    /// Gets a page full of lines beginning after the line currently displayed
+    /// at the bottom of the window.
     pub fn next_page(&mut self) -> Vec<iter::FilteredLine> {
         let start_line = self.end_line + 1;
         let num_lines = self.height;
@@ -88,6 +109,8 @@ impl<T: Iterator<Item=String>> WindowBuffer<T> {
         lines
     }
 
+    /// Gets a page full of lines ending before the line currently displayed
+    /// at the top of the window.
     pub fn prev_page(&mut self) -> Vec<iter::FilteredLine> {
         let start_line = if (self.start_line as i64 - self.height as i64 >= 1) {
             self.start_line - self.height
