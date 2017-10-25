@@ -12,8 +12,10 @@ pub struct WindowBuffer<T: Iterator<Item=String>> {
     width: usize,
     /// height of window in lines
     height: usize,
-    /// 1-offset index of line at top of window
-    cur_line: usize,
+    /// 1-indexed offset of line at top of window
+    start_line: usize,
+    /// 1-offset index of line at bottom of window
+    end_line: usize,
 }
 
 impl<T: Iterator<Item=String>> WindowBuffer<T> {
@@ -31,7 +33,8 @@ impl<T: Iterator<Item=String>> WindowBuffer<T> {
             predicate: predicate,
             width: width,
             height: height,
-            cur_line: 0,
+            start_line: 0,
+            end_line: 0,
         };
 
         ret
@@ -50,57 +53,50 @@ impl<T: Iterator<Item=String>> WindowBuffer<T> {
 
         // XXX it's probably not desireable to reset the line number to zero
         // when the filter predicate is changed
-        self.cur_line = 0;
+        self.end_line = 0;
     }
 
     pub fn next_line(&mut self) -> Option<iter::FilteredLine> {
-        let next_line = self.cur_line + 1;
+        let next_line = self.end_line + 1;
 
         let lines = self.get_lines(next_line, 1);
-        self.cur_line = if lines.len() > 0 { next_line } else { self.cur_line };
+        self.end_line = if lines.len() > 0 { next_line } else { self.end_line };
 
         lines.first().map(|line| line.to_owned())
     }
 
     pub fn prev_line(&mut self) -> Option<iter::FilteredLine> {
-        if self.cur_line as i64 - 1 <= 0 {
+        if self.end_line as i64 - self.height as i64 <= 0 {
             // case already at the beginning; can't go back farther
             return None
         }
 
-        let next_line = if self.cur_line > 0 { self.cur_line - 1 } else { 0 };
+        let next_line = if self.end_line - self.height > 0 { self.end_line - self.height } else { 0 };
+        let new_end_line = if self.end_line > 0 { self.end_line - 1 } else { 0 };
 
         let lines = self.get_lines(next_line, 1);
-        self.cur_line = if lines.len() > 0 { next_line } else { self.cur_line };
+        self.end_line = if lines.len() > 0 { new_end_line } else { self.end_line };
 
         lines.first().map(|line| line.to_owned())
     }
 
     pub fn next_page(&mut self) -> Vec<iter::FilteredLine> {
-        let first_line = self.cur_line + 1;
+        let start_line = self.end_line + 1;
         let num_lines = self.height;
-        let lines = self.get_lines(first_line, num_lines);
-
-        self.cur_line = if lines.len() > 0 {
-            self.cur_line + lines.len()
-        } else {
-            self.buffered_lines.len() + 1
-        };
+        let lines = self.get_lines(start_line, num_lines);
 
         lines
     }
 
     pub fn prev_page(&mut self) -> Vec<iter::FilteredLine> {
-        let (first_line, num_lines) = if self.cur_line as i64 - self.height as i64 >= 1 {
-            (self.cur_line - self.height, self.height)
+        let start_line = if (self.start_line as i64 - self.height as i64 >= 1) {
+            self.start_line - self.height
         } else {
-            let num_lines = if self.cur_line > 0 { self.cur_line - 1 } else { 0 };
-            (1, num_lines)
+            1
         };
 
-        let lines = self.get_lines(first_line, num_lines);
-
-        self.cur_line = if lines.len() > 0 { first_line } else { 0 };
+        let num_lines = self.height;
+        let lines = self.get_lines(start_line, num_lines);
 
         lines
     }
@@ -121,6 +117,10 @@ impl<T: Iterator<Item=String>> WindowBuffer<T> {
         } else {
             self.buffered_lines.len()
         };
+
+
+        self.start_line = start + 1;
+        self.end_line = end;
 
         if let Some(lines) = self.buffered_lines.get(start..end) {
             lines.to_owned()
@@ -191,10 +191,6 @@ mod test {
         assert_eq!(obj_ut.next_line(), None);
 
         assert_eq!(obj_ut.prev_line()
-               , Some(FilteredLine::UnfilteredLine((9, "nine".to_owned()))));
-        assert_eq!(obj_ut.prev_line()
-               , Some(FilteredLine::UnfilteredLine((8, "eight".to_owned()))));
-        assert_eq!(obj_ut.prev_line()
                , Some(FilteredLine::UnfilteredLine((7, "seven".to_owned()))));
         assert_eq!(obj_ut.prev_line()
                , Some(FilteredLine::UnfilteredLine((6, "six".to_owned()))));
@@ -229,8 +225,7 @@ mod test {
 
         let mut obj_ut = WindowBuffer::new(iter, None, 80, 3);
 
-        assert_eq!(obj_ut.prev_page(), Vec::new());
-        assert_eq!(obj_ut.next_page(), vec![
+        assert_eq!(obj_ut.prev_page(), vec![
                    FilteredLine::UnfilteredLine((1, "one".to_owned())),
                    FilteredLine::UnfilteredLine((2, "two".to_owned())),
                    FilteredLine::UnfilteredLine((3, "three".to_owned())),
@@ -271,14 +266,20 @@ mod test {
 
         assert_eq!(obj_ut.prev_page(), vec![
                    FilteredLine::UnfilteredLine((1, "one".to_owned())),
+                   FilteredLine::UnfilteredLine((2, "two".to_owned())),
+                   FilteredLine::UnfilteredLine((3, "three".to_owned())),
         ]);
 
-        assert_eq!(obj_ut.prev_page(), Vec::new());
-
-        assert_eq!(obj_ut.next_page(), vec![
+        assert_eq!(obj_ut.prev_page(), vec![
                    FilteredLine::UnfilteredLine((1, "one".to_owned())),
                    FilteredLine::UnfilteredLine((2, "two".to_owned())),
                    FilteredLine::UnfilteredLine((3, "three".to_owned())),
+        ]);
+
+        assert_eq!(obj_ut.next_page(), vec![
+                   FilteredLine::UnfilteredLine((4, "four".to_owned())),
+                   FilteredLine::UnfilteredLine((5, "five".to_owned())),
+                   FilteredLine::UnfilteredLine((6, "six".to_owned())),
         ]);
     }
 
