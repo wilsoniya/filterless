@@ -1,6 +1,9 @@
-use iter::{FilteredLine, FilterPredicate, WindowBuffer};
+use std::cmp::{max};
 
 use ncurses;
+
+use iter::{FilteredLine, FilterPredicate, WindowBuffer};
+
 
 pub struct Pager<T: Iterator<Item=String>> {
     window: ncurses::WINDOW,
@@ -125,7 +128,8 @@ impl<T: Iterator<Item=String>> Pager<T> {
     }
 
     fn print_line_num(&mut self, line_num: usize) {
-        self.num_digits = (line_num as f32).log10().floor() as usize + 1;
+        self.num_digits = max(
+            self.num_digits, (line_num as f32).log10().floor() as usize + 1);
         ncurses::wattron(self.window, ncurses::COLOR_PAIR(2));
         ncurses::wprintw(self.window,
                          &format!("{:>1$} ", line_num, self.num_digits));

@@ -144,7 +144,8 @@ fn main() {
     refresh();
 
     let win = newwin(height, width, MARGIN / 2, MARGIN / 2);
-    let iter = lines.map(|l| l.expect("Unicode error encountered on line"));
+//  let iter = lines.map(|l| l.expect("Unicode error encountered on line"));
+    let iter = lines.map(|l| l.unwrap_or("UNICODE ERROR".to_owned()));
     let mut pager = Pager::new(win, iter);
     pager.next_page();
 
