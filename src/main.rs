@@ -3,8 +3,8 @@
 #![feature(type_ascription)]
 
 extern crate clap;
-extern crate ncurses;
 extern crate libc;
+extern crate ncurses;
 
 mod iter;
 mod pager;
@@ -95,8 +95,8 @@ fn get_input<'a>(_stdin: &'a std::io::Stdin) -> Box<BufRead + 'a> {
 /// ### Parameters
 /// * `width`: width of the terminal in columns
 /// * `height`: height of the terminal in rows
-fn _filter(width: i32, height: i32) -> String {
-    let filter_win = newwin(1, width, height - 1, 0);
+fn _filter<T: Iterator<Item=String>>(width: i32, height: i32, pager: &mut Pager<T>) {
+    let filter_win = newwin(1, 0, height - 1, 0);
     wprintw(filter_win, "Filter: ");
     wrefresh(filter_win);
     let mut filter_str = String::new();
@@ -122,9 +122,23 @@ fn _filter(width: i32, height: i32) -> String {
                 wrefresh(filter_win);
             },
         }
+
+        let predicate = if filter_str.len() > 0 {
+            Some(filter_str.to_owned())
+        } else {
+            None
+        };
+
+        pager.filter(predicate);
+        ncurses::wrefresh(filter_win);
     }
+
+    if filter_str.len() <= 0 {
+        wclear(filter_win);
+        wrefresh(filter_win);
+    }
+
     delwin(filter_win);
-    return filter_str;
 }
 
 /// System entry point
@@ -143,7 +157,7 @@ fn main() {
 
     refresh();
 
-    let win = newwin(height, width, MARGIN / 2, MARGIN / 2);
+    let win = newwin(height - 1, width, MARGIN / 2, MARGIN / 2);
 //  let iter = lines.map(|l| l.expect("Unicode error encountered on line"));
     let iter = lines.map(|l| l.unwrap_or("UNICODE ERROR".to_owned()));
     let mut pager = Pager::new(win, iter);
@@ -156,8 +170,8 @@ fn main() {
             KEY_NPAGE | CTRL_D => pager.next_page(),
             KEY_PPAGE | CTRL_U => pager.prev_page(),
             FWD_SLASH => {
-                let filter_str = _filter(width, height);
-                pager.filter(filter_str);
+                _filter(width, height, &mut pager);
+                wrefresh(win);
             },
             LOWER_Q => break,
             _ => continue,

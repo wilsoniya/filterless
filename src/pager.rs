@@ -112,18 +112,20 @@ impl<T: Iterator<Item=String>> Pager<T> {
         }
     }
 
-    pub fn filter(&mut self, target: String) {
-        let predicate = FilterPredicate {
-            filter_string: target,
-            context_lines: 3,
-        };
+    pub fn filter(&mut self, target: Option<String>) {
+        let predicate = target.map(|p| {
+            FilterPredicate {
+                filter_string: p,
+                context_lines: 3,
+            }
+        });
 
         {
             let window_buffer = self.window_buffer.as_mut().expect("window_buffer is None");
-            window_buffer.set_predicate(Some(predicate.clone()));
+            window_buffer.set_predicate(predicate.clone());
         }
 
-        self.predicate = Some(predicate);
+        self.predicate = predicate;
         self.next_page();
     }
 
